@@ -10,6 +10,9 @@ export default function PlaygroundPage() {
   const [streamStatus, setStreamStatus] = useState("connecting");
   const [errorMessage, setErrorMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastUpdateRef = useRef<number>(Date.now());
 
   // Fixed screen ID - change this to your actual IP
   const FIXED_SCREEN_ID = "10.121.229.107";
@@ -19,19 +22,6 @@ export default function PlaygroundPage() {
     if (!inputValue.trim()) return;
     console.log("Submitted:", inputValue);
     setInputValue("");
-  };
-
-  // Test if the stream URL is accessible
-  const testStreamConnection = async (url: string): Promise<boolean> => {
-    try {
-      const response = await fetch(url, {
-        method: "HEAD",
-        mode: "no-cors", // We can't read the response but we can see if it fails
-      });
-      return true;
-    } catch (error) {
-      return false;
-    }
   };
 
   // Handle page visibility changes
@@ -61,9 +51,6 @@ export default function PlaygroundPage() {
     if (!videoRef.current) return;
 
     const video = videoRef.current;
-    let hls: Hls | null = null;
-    let retryCount = 0;
-    const maxRetries = 3;
 
     const playVideo = () => {
       video
@@ -72,114 +59,142 @@ export default function PlaygroundPage() {
           setIsPlaying(true);
           setStreamStatus("live");
           setErrorMessage("");
-          retryCount = 0; // Reset retry count on success
+          lastUpdateRef.current = Date.now();
         })
         .catch((error) => {
           console.log("Auto-play failed:", error.message);
-          setStreamStatus("error");
-          setErrorMessage(`Playback failed: ${error.message}`);
+          // Don't set error status for autoplay failures
+          setStreamStatus("waiting");
         });
     };
 
     const handleHlsError = (event: string, data: any) => {
-      console.error("HLS error event:", event, "data:", data);
-      retryCount++;
+      console.log("HLS event:", event, "data:", data);
 
-      // Default error message for empty error objects
-      let errorMsg =
-        "Cannot connect to stream server. Common issues:\n• Server is not running\n• Wrong IP address\n• CORS restrictions\n• Network firewall";
-
-      // Try to extract meaningful information from the error
-      if (data && data.details) {
-        errorMsg = `Stream error: ${data.details}`;
-      } else if (data && data.type) {
-        errorMsg = `Stream error: ${data.type}`;
-      } else if (data && data.response) {
-        errorMsg = `HTTP ${data.response.code}: ${
-          data.response.text || "Server error"
-        }`;
+      // Only handle fatal errors, ignore non-fatal ones
+      if (!data.fatal) {
+        console.log("Non-fatal error, continuing...");
+        return;
       }
 
-      setErrorMessage(errorMsg);
-      setStreamStatus("error");
+      const errorType = data.type;
+      const errorDetails = data.details;
 
-      // Only attempt recovery for network errors, not for fatal errors
-      if (data && data.fatal) {
-        switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            if (retryCount <= maxRetries) {
-              console.log(`Network error - retry ${retryCount}/${maxRetries}`);
-              setErrorMessage(
-                `Network error - retrying... (${retryCount}/${maxRetries})`
-              );
-              setTimeout(() => {
-                hls?.startLoad();
-              }, 2000 * retryCount); // Exponential backoff
-            } else {
-              setErrorMessage(
-                "Network error - failed after multiple retries. Check server connection."
-              );
-            }
-            break;
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            console.log("Media error, recovering...");
-            hls?.recoverMediaError();
-            break;
-          default:
-            console.log("Fatal error, cannot recover");
-            setErrorMessage(
-              "Fatal stream error. Please verify:\n1. Server is running\n2. Correct IP address\n3. Port 8888 is accessible"
-            );
-            break;
+      console.log(`Fatal error - Type: ${errorType}, Details: ${errorDetails}`);
+
+      // Handle different types of fatal errors
+      if (errorType === Hls.ErrorTypes.NETWORK_ERROR) {
+        console.log("Network error - will retry automatically");
+        setStreamStatus("waiting");
+        setErrorMessage("Waiting for connection...");
+
+        // Clear any existing retry timeout
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
         }
+
+        // Try to recover after a delay
+        retryTimeoutRef.current = setTimeout(() => {
+          console.log("Attempting to recover from network error");
+          if (hlsRef.current) {
+            hlsRef.current.startLoad();
+          }
+        }, 3000);
+      } else if (errorType === Hls.ErrorTypes.MEDIA_ERROR) {
+        console.log("Media error - attempting recovery");
+        setStreamStatus("waiting");
+        if (hlsRef.current) {
+          hlsRef.current.recoverMediaError();
+        }
+      } else {
+        // For other fatal errors, just wait - don't show big error
+        console.log("Other error type, waiting for stream to resume");
+        setStreamStatus("waiting");
+        setErrorMessage("Waiting for stream...");
       }
     };
 
-    const initializeHls = async () => {
-      // First, test if the stream URL is accessible
+    const initializeHls = () => {
       setStreamStatus("connecting");
-      setErrorMessage("Testing connection to stream server...");
 
       if (Hls.isSupported()) {
         console.log("Initializing HLS.js with URL:", streamUrl);
 
-        hls = new Hls({
+        const hls = new Hls({
           enableWorker: false,
-          lowLatencyMode: true,
-          backBufferLength: 90,
+          lowLatencyMode: true, // Enable low latency
+          backBufferLength: 0, // No buffer behind
           debug: false,
-          maxMaxBufferLength: 30,
-          liveSyncDurationCount: 3,
+          maxMaxBufferLength: 0.5, // Minimal buffer (0.5 seconds)
+          maxBufferSize: 500 * 1000, // 500KB buffer
+          maxBufferLength: 0.5, // Buffer only 0.5 seconds ahead
+          liveSyncDurationCount: 0, // Stay exactly at live edge
+          liveMaxLatencyDurationCount: 1, // Jump to live immediately if behind
+          liveDurationInfinity: true,
+          manifestLoadingTimeOut: 10000,
+          manifestLoadingMaxRetry: 10,
+          manifestLoadingRetryDelay: 500,
+          levelLoadingTimeOut: 10000,
+          levelLoadingMaxRetry: 10,
+          levelLoadingRetryDelay: 500,
+          fragLoadingTimeOut: 10000,
+          fragLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          highBufferWatchdogPeriod: 1,
+          nudgeOffset: 0.1, // Minimal offset
+          nudgeMaxRetry: 10, // Keep trying to stay at edge
         });
 
-        // Add all event listeners for debugging
+        hlsRef.current = hls;
+
+        // Track successful data loading
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          console.log("Fragment loaded");
+          lastUpdateRef.current = Date.now();
+          if (streamStatus !== "live" && isPlaying) {
+            setStreamStatus("live");
+            setErrorMessage("");
+          }
+        });
+
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
           console.log("HLS media attached");
         });
 
         hls.on(Hls.Events.MANIFEST_LOADING, () => {
           console.log("HLS manifest loading");
+          setStreamStatus("connecting");
         });
 
         hls.on(Hls.Events.MANIFEST_LOADED, () => {
           console.log("HLS manifest loaded successfully");
           setErrorMessage("");
+          lastUpdateRef.current = Date.now();
         });
 
         hls.on(Hls.Events.LEVEL_LOADED, () => {
           console.log("HLS level loaded");
+          lastUpdateRef.current = Date.now();
         });
 
+        // Only log errors, don't crash on them
         hls.on(Hls.Events.ERROR, handleHlsError);
 
         try {
           console.log("Loading HLS source...");
           hls.loadSource(streamUrl);
           hls.attachMedia(video);
+
+          // Try to play after a short delay
+          setTimeout(() => {
+            if (isVisible) {
+              playVideo();
+            }
+          }, 1000);
         } catch (error) {
           console.error("HLS initialization error:", error);
-          setStreamStatus("error");
-          setErrorMessage(`HLS initialization failed: ${error}`);
+          setStreamStatus("waiting");
+          setErrorMessage("Waiting for stream...");
         }
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         // Native HLS support (Safari)
@@ -188,17 +203,16 @@ export default function PlaygroundPage() {
 
         video.addEventListener("loadeddata", () => {
           console.log("Native HLS data loaded");
+          lastUpdateRef.current = Date.now();
           if (isVisible) {
             playVideo();
           }
         });
 
         video.addEventListener("error", (e) => {
-          console.error("Native video error:", e);
-          setStreamStatus("error");
-          setErrorMessage(
-            "Native video error - check stream URL and CORS settings"
-          );
+          console.log("Native video error (will retry):", e);
+          setStreamStatus("waiting");
+          setErrorMessage("Waiting for stream...");
         });
       } else {
         setStreamStatus("error");
@@ -211,11 +225,31 @@ export default function PlaygroundPage() {
     // Cleanup function
     return () => {
       console.log("Cleaning up HLS instance");
-      if (hls) {
-        hls.destroy();
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
   }, [isVisible, streamUrl]);
+
+  // Monitor stream health
+  useEffect(() => {
+    const checkInterval = setInterval(() => {
+      const timeSinceUpdate = Date.now() - lastUpdateRef.current;
+
+      // If no update in 8 seconds and we think we're live, switch to waiting
+      if (timeSinceUpdate > 8000 && streamStatus === "live") {
+        console.log("No updates for 8 seconds, switching to waiting status");
+        setStreamStatus("waiting");
+        setErrorMessage("Waiting for stream data...");
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(checkInterval);
+  }, [streamStatus]);
 
   // Resume playback when clicking on the video container
   const handleVideoClick = () => {
@@ -226,10 +260,11 @@ export default function PlaygroundPage() {
           setIsPlaying(true);
           setStreamStatus("live");
           setErrorMessage("");
+          lastUpdateRef.current = Date.now();
         })
         .catch((error) => {
-          setStreamStatus("error");
-          setErrorMessage(`Playback failed: ${error.message}`);
+          console.log("Playback failed:", error.message);
+          setStreamStatus("waiting");
         });
     }
   };
@@ -240,7 +275,13 @@ export default function PlaygroundPage() {
     setStreamStatus("connecting");
     setErrorMessage("Reconnecting...");
 
-    if (videoRef.current) {
+    if (hlsRef.current) {
+      hlsRef.current.stopLoad();
+      setTimeout(() => {
+        hlsRef.current?.startLoad();
+        videoRef.current?.play().catch(console.error);
+      }, 500);
+    } else if (videoRef.current) {
       videoRef.current.load();
       setTimeout(() => {
         videoRef.current?.play().catch(console.error);
@@ -268,14 +309,13 @@ export default function PlaygroundPage() {
                 setIsPlaying(true);
                 setStreamStatus("live");
                 setErrorMessage("");
+                lastUpdateRef.current = Date.now();
               }}
               onPause={() => setIsPlaying(false)}
               onError={(e) => {
-                console.error("Video error event:", e);
-                setStreamStatus("error");
-                setErrorMessage(
-                  "Video element error - check console for details"
-                );
+                console.log("Video error event:", e);
+                // Don't show error, just wait
+                setStreamStatus("waiting");
               }}
             >
               Your browser does not support the video tag.
@@ -287,6 +327,15 @@ export default function PlaygroundPage() {
                 <div className="text-center text-white p-4">
                   <p className="text-lg font-medium">Stream Paused</p>
                   <p className="text-sm">Return to this tab to resume</p>
+                </div>
+              </div>
+            )}
+
+            {streamStatus === "waiting" && (
+              <div className="absolute top-4 right-4 bg-black/80 text-white px-4 py-2 rounded-lg text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Waiting for stream data...</span>
                 </div>
               </div>
             )}
@@ -363,6 +412,8 @@ export default function PlaygroundPage() {
                     ? "PAUSED"
                     : streamStatus === "error"
                     ? "CONNECTION ERROR"
+                    : streamStatus === "waiting"
+                    ? "BUFFERING"
                     : "CONNECTING"}
                 </span>
                 <span className="text-xs text-muted-foreground max-w-md">
@@ -372,6 +423,8 @@ export default function PlaygroundPage() {
                     ? "Stream paused - tab in background"
                     : streamStatus === "error"
                     ? errorMessage
+                    : streamStatus === "waiting"
+                    ? "Waiting for stream data - weak connection detected"
                     : "Establishing connection to stream server..."}
                 </span>
               </div>
@@ -392,6 +445,8 @@ export default function PlaygroundPage() {
                       ? "Connected"
                       : streamStatus === "paused"
                       ? "Standby"
+                      : streamStatus === "waiting"
+                      ? "Buffering"
                       : "Connecting"}
                   </span>
                 </div>
@@ -400,7 +455,7 @@ export default function PlaygroundPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {streamStatus === "error" && (
+            {(streamStatus === "error" || streamStatus === "waiting") && (
               <button
                 onClick={handleRetry}
                 className="flex items-center gap-2 px-3 py-2 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
