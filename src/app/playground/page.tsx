@@ -17,6 +17,7 @@ export default function PlaygroundPage() {
   // Fixed screen ID - change this to your actual IP
   const FIXED_SCREEN_ID = "10.121.229.107";
   const streamUrl = `http://${FIXED_SCREEN_ID}:8888/screen/index.m3u8`;
+  //   const streamUrl = `https://rosa-heads-blonde-make.trycloudflare.com/screen/index.m3u8`;
 
   const handleSubmit = () => {
     if (!inputValue.trim()) return;
