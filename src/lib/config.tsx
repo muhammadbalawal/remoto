@@ -11,8 +11,8 @@ import {
 export const BLUR_FADE_DELAY = 0.15;
 
 export const siteConfig = {
-  name: "AI Agent SDK",
-  description: "Create AI Agents with just a few lines of code.",
+  name: "Remoto Ai",
+  description: "Access devices out of reach from anywhere around the world.",
   cta: "Get Started",
   url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
   keywords: [
@@ -29,11 +29,10 @@ export const siteConfig = {
     instagram: "https://instagram.com/aiagentsdk",
   },
   hero: {
-    title: "AI Agent SDK",
-    description:
-      "Create powerful AI agent workflows with just a few lines of code, enabling complex task automation and decision-making processes.",
+    title: "Remoto Ai",
+    description: "Access devices out of reach from anywhere around the world.",
     cta: "Get Started",
-    ctaDescription: "Available for all major programming languages",
+    ctaDescription: "",
   },
   features: [
     {
@@ -135,7 +134,7 @@ export const siteConfig = {
       { text: "Contact", url: "#" },
     ],
     bottomText: "All rights reserved.",
-    brandText: "AGENT SDK",
+    brandText: "Remoto AI",
   },
 
   testimonials: [

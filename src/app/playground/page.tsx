@@ -28,7 +28,7 @@ export default function PlaygroundPage() {
   // Fixed screen ID - change this to your actual IP
   const FIXED_SCREEN_ID = "10.121.229.107";
   //const streamUrl = `http://${FIXED_SCREEN_ID}:8888/screen/index.m3u8`;
-  const streamUrl = `https://myers-horizon-dispatch-thinkpad.trycloudflare.com/screen/`;
+  const streamUrl = `https://stevens-hidden-scripting-pan.trycloudflare.com/screen/index.m3u8`;
 
   // Update input field with speech transcript
   useEffect(() => {
@@ -113,8 +113,6 @@ export default function PlaygroundPage() {
 
       const errorType = data.type;
       const errorDetails = data.details;
-
-      console.log(`Fatal error - Type: ${errorType}, Details: ${errorDetails}`);
 
       // Handle different types of fatal errors
       if (errorType === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -411,7 +409,6 @@ export default function PlaygroundPage() {
             )}
           </div>
         </div>
-
         {/* Enhanced Stream Status */}
         <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-4">
@@ -512,7 +509,6 @@ export default function PlaygroundPage() {
             )}
           </div>
         </div>
-
         {/* Input Field with Microphone and Send buttons */}
         <div className="relative">
           <input
@@ -573,15 +569,6 @@ export default function PlaygroundPage() {
             </svg>
           </button>
         </div>
-
-        {/* Speech recognition status */}
-        {listening && (
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-            <span>Listening... Speak now</span>
-          </div>
-        )}
-
         {/* Browser support warning */}
         {!browserSupportsSpeechRecognition && (
           <div className="text-center text-sm text-muted-foreground">
