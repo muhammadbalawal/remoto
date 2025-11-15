@@ -68,6 +68,9 @@ importers:
       react-icons:
         specifier: ^5.2.1
         version: 5.2.1(react@19.1.0)
+      react-speech-recognition:
+        specifier: ^4.0.1
+        version: 4.0.1(react@19.1.0)
       rehype-pretty-code:
         specifier: ^0.14.0
         version: 0.14.0(shiki@1.22.0)
@@ -2136,6 +2139,11 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  react-speech-recognition@4.0.1:
+    resolution: {integrity: sha512-0fIqzLtfY8vuYA6AmJVK7qiabZx0oFKOO+rbiBgFI3COWVGREy0A+gdU16hWXmFebeyrI8JsOLYsWk6WaHUXRw==}
+    peerDependencies:
+      react: '>=16.8.0'
 
   react-style-singleton@2.2.1:
     resolution: {integrity: sha512-ZWj0fHEMyWkHzKYUr2Bs/4zU6XLmq9HsgBURm7g5pAVfyn49DgUiNgY2d4lXRlYSiCif9YBGpQleewkcqddc7g==}
@@ -4815,6 +4823,11 @@ snapshots:
       use-sidecar: 1.1.2(@types/react@18.3.3)(react@19.1.0)
     optionalDependencies:
       '@types/react': 18.3.3
+
+  react-speech-recognition@4.0.1(react@19.1.0):
+    dependencies:
+      lodash.debounce: 4.0.8
+      react: 19.1.0
 
   react-style-singleton@2.2.1(@types/react@18.3.3)(react@19.1.0):
     dependencies:
