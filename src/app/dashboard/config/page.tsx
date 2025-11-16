@@ -106,7 +106,7 @@ export default function ConfigPage() {
 
               <div className="flex flex-col gap-2 sm:gap-3">
                 <label className="font-medium text-sm sm:text-base">
-                  AI Model URLc
+                  AI Model URL
                 </label>
                 <Input
                   placeholder="https://your-backend-api.com"
