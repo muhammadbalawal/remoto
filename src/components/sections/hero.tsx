@@ -149,24 +149,50 @@ export function Hero() {
 
   return (
     <Section id="hero">
-      <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-x-8 w-full p-6 lg:p-12 border-x overflow-hidden">
-        <div className="flex flex-col justify-start items-start lg:col-span-1">
-          {/* <HeroPill /> */}
-          <HeroTitles />
-          <HeroCTA />
+      {/* Wrapper for absolute positioning */}
+      <div className="relative w-full">
+        {/* Main grid container */}
+        <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-x-8 w-full p-6 lg:p-12 border-x">
+          <div className="flex flex-col justify-start items-start lg:col-span-1">
+            <HeroTitles />
+            <HeroCTA />
+          </div>
         </div>
+
+        {/* Spline positioned ONLY on the right side */}
         {!isMobile && (
-          <div className="relative lg:h-full lg:col-span-1">
+          <div
+            className="
+            absolute 
+            top-0 
+            right-0 
+            w-full 
+            lg:w-1/2 
+            h-full 
+            pointer-events-none
+            overflow-visible
+          "
+          >
             <Suspense>
               {showSpline && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.8, delay: 1 }}
+                  className="w-full h-full flex items-center justify-center"
                 >
                   <LazySpline
                     scene="https://prod.spline.design/mZBrYNcnoESGlTUG/scene.splinecode"
-                    className="absolute inset-0 w-full h-full origin-top-left flex items-center justify-center"
+                    className="
+                    absolute 
+                    inset-0 
+                    w-full 
+                    h-full 
+                    origin-top-left 
+                    flex 
+                    items-center 
+                    justify-center
+                  "
                   />
                 </motion.div>
               )}
