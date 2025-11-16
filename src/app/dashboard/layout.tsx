@@ -75,9 +75,7 @@ export default function DashboardLayout({
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <div className="flex items-center justify-center mb-6">
-          <h1 className="text-xl font-bold">Dashboard</h1>
-        </div>
+        <div className="flex items-center justify-center mb-6"></div>
 
         {/* NAV ITEMS with button-style hover */}
         <nav className="flex flex-col gap-2 flex-1">

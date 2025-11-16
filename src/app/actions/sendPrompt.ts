@@ -2,47 +2,65 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 
-export async function sendPrompt(text: string): Promise<string> {
-    // Use server-side client
-    const supabase = await createServerSupabase();
+// Match the backend VoiceResponse model
+interface VoiceResponse {
+  assistant_message: string;
+  assistant_audio_base64: string | null;
+  code_executed: string | null;
+  execution_result: string;
+  screenshot_base64: string;
+  success: boolean;
+}
 
-    const {
-        data: { user },
-        error: userError,
-    } = await supabase.auth.getUser();
+export async function sendPrompt(text: string): Promise<VoiceResponse> {
+  // Use server-side client
+  const supabase = await createServerSupabase();
 
-    if (userError || !user) {
-        throw new Error("Not authenticated");
-    }
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-    // Rest of your code remains the same...
-    const { data, error: configError } = await supabase
-        .from("UserConfig")
-        .select("json")
-        .eq("id", user.id)
-        .single();
+  if (userError || !user) {
+    throw new Error("Not authenticated");
+  }
 
-    if (configError) {
-        throw new Error("Error fetching user config");
-    }
+  const { data, error: configError } = await supabase
+    .from("UserConfig")
+    .select("json")
+    .eq("id", user.id)
+    .single();
 
-    const backendURL = data?.json?.backendURL;
+  if (configError) {
+    throw new Error("Error fetching user config");
+  }
 
-    if (!backendURL) {
-        throw new Error("Backend URL not configured for this user");
-    }
+  const backendURL = data?.json?.backendURL;
 
-    const res = await fetch(`${backendURL}/voice`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-        cache: "no-store",
-    });
+  if (!backendURL) {
+    throw new Error("Backend URL not configured for this user");
+  }
 
-    if (!res.ok) {
-        throw new Error("Failed to fetch improved prompt");
-    }
+  const res = await fetch(`${backendURL}/voice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      history: [], // Add conversation history if you're tracking it
+    }),
+    cache: "no-store",
+  });
 
-    const payload: { improved_prompt: string } = await res.json();
-    return payload.improved_prompt;
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Backend error: ${res.status} - ${errorText}`);
+  }
+
+  const payload: VoiceResponse = await res.json();
+
+  if (!payload.success) {
+    throw new Error(`Command failed: ${payload.execution_result}`);
+  }
+
+  return payload;
 }

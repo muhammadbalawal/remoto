@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
@@ -9,6 +9,12 @@ import ScreenStream from "@/components/ScreenStream";
 
 export default function PromptInput() {
   const [inputValue, setInputValue] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const autoSubmitTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const previousTranscriptRef = useRef("");
+
+  // Silence detection timeout in milliseconds (e.g., 2000 = 2 seconds of silence)
+  const SILENCE_DELAY = 2000;
 
   // Speech recognition hook
   const {
@@ -25,16 +31,84 @@ export default function PromptInput() {
     }
   }, [transcript]);
 
+  // Auto-submit on silence detection
+  useEffect(() => {
+    if (listening && transcript) {
+      // Clear any existing timer
+      if (autoSubmitTimerRef.current) {
+        clearTimeout(autoSubmitTimerRef.current);
+      }
+
+      // Check if transcript has changed (new speech detected)
+      if (transcript !== previousTranscriptRef.current) {
+        previousTranscriptRef.current = transcript;
+
+        // Set new timer - will trigger if no new speech for SILENCE_DELAY
+        autoSubmitTimerRef.current = setTimeout(() => {
+          SpeechRecognition.stopListening();
+          // Small delay to ensure transcript is captured before submit
+          setTimeout(() => {
+            handleSubmit();
+          }, 100);
+        }, SILENCE_DELAY);
+      }
+    } else if (!listening) {
+      // Clear timer and reset when not listening
+      if (autoSubmitTimerRef.current) {
+        clearTimeout(autoSubmitTimerRef.current);
+        autoSubmitTimerRef.current = null;
+      }
+      previousTranscriptRef.current = "";
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (autoSubmitTimerRef.current) {
+        clearTimeout(autoSubmitTimerRef.current);
+      }
+    };
+  }, [listening, transcript]);
+
+  // Function to play audio from base64
+  const playAudio = (base64Audio: string) => {
+    try {
+      const byteCharacters = atob(base64Audio);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "audio/mpeg" });
+
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+    } catch (err) {
+      console.error("Error playing audio:", err);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!inputValue.trim()) return;
     console.log("Submitted:", inputValue);
+    setIsSubmitting(true);
     try {
       console.log("Sending to FastAPI:", inputValue);
-      await sendPrompt(inputValue);
+      const result = await sendPrompt(inputValue);
+
+      // Play audio if available
+      if (result.assistant_audio_base64) {
+        playAudio(result.assistant_audio_base64);
+      }
+
       setInputValue(""); // clear input
       resetTranscript(); // clear speech transcript
     } catch (err) {
       console.error("Error sending prompt:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -102,7 +176,12 @@ export default function PromptInput() {
           {/* Send Button */}
           <button
             onClick={handleSubmit}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-primary p-2 sm:p-3 text-primary-foreground transition-all hover:bg-primary/90"
+            disabled={isSubmitting}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 sm:p-3 transition-all ${
+              isSubmitting
+                ? "bg-primary text-primary-foreground animate-pulse"
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
+            }`}
             aria-label="Send"
           >
             <svg
