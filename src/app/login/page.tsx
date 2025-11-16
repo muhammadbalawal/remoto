@@ -92,7 +92,7 @@ export default function LoginPage() {
 
               <div className="text-center mt-2">
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  Don't have an account?
+                  Dont have an account?
                 </p>
                 <Button
                   variant="outline"
