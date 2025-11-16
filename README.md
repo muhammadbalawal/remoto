@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Remote AI - Remote Computer Control System
 
-## Getting Started
+## Project Overview
+Remote AI enables secure remote access and control of home computer through voice commands from anywhere in the world. The system combines speech recognition, AI agent processing, and real-time streaming to allow users to interact with their remote computers from any location. Users authenticate via Supabase and communicate through a React-based interface that translates voice commands into executable actions on the target machine.
 
-First, run the development server:
+![Alt text](./public/Remoto.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## System Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Frontend Interface
+Built with React and react-speech-recognition for speech-to-text conversion. The interface handles user authentication through Supabase and provides real-time video streaming from the remote computer.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+### Backend Services
+A Python service runs persistently on the local computer, managing authentication, command execution, and media streaming. 
 
-## Learn More
+### AI Agent Core
+The custom AI agent processes user commands through multiple stages:
+- Receives transcribed text from speech input
+- Captures screen content using OpenCV for image processing
+- Extracts textual context using Tesseract OCR
+- Analyzes screen state and user intent to generate executable commands
+- Executes actions via pyautogui for keyboard and mouse control
+- Provides audio confirmation through Google Text-to-Speech
 
-To learn more about Next.js, take a look at the following resources:
+### Media Streaming Pipeline
+Live screen content is streamed using MediaMTX and FFmpeg for encoding, with global delivery handled through Cloudflare. This ensures low-latency visual feedback to users during remote sessions.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Workflow Process
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+1. **Authentication & Connection**
+   Users securely login through Supabase authentication, establishing a connection to their home computer running the Python backend service.
 
-## Deploy on Vercel
+2. **Voice Command Processing**
+   Speech input is captured via the React interface and converted to text using speech recognition libraries.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. **Screen Analysis & Command Generation**
+   The AI agent captures the current screen state, resizes images using OpenCV, and extracts UI context with Tesseract OCR. This contextual information combined with the user's command enables the agent to generate precise keyboard and mouse actions.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+4. **Action Execution**
+   Generated commands are executed on the remote computer using pyautogui, performing the requested operations with screen-relative precision.
+
+5. **User Feedback**
+   Upon task completion, the system provides audio confirmation via Google Text-to-Speech, informing users of successful command execution while the live stream displays the updated screen state.
+
+## Technical Implementation
+
+The system integrates multiple technologies including React for the user interface, Python for backend services, OpenCV and Tesseract for computer vision tasks, pyautogui for system control, and MediaMTX with Cloudflare for streaming delivery. Speech processing handles both input transcription and output audio responses, creating a seamless voice-controlled remote access experience.
