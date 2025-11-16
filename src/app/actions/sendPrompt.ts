@@ -34,7 +34,7 @@ export async function sendPrompt(text: string): Promise<string> {
   }
 
   // 4. Send request to the user's backend
-  const res = await fetch(`${backendURL}/improve`, {
+  const res = await fetch(`${backendURL}/voice`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
