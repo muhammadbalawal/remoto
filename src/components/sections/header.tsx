@@ -34,7 +34,6 @@ export function Header() {
           </Link>
         </div>
         <div className="mt-2 cursor-pointer block lg:hidden">
-          {/* <MobileDrawer /> */}
         </div>
       </div>
       <hr className="absolute w-full bottom-0" />

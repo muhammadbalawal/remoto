@@ -37,13 +37,11 @@ export default function ScreenStream() {
 
   return (
     <div className="relative w-full h-full">
-      {/* Animated gradient border wrapper */}
       <div className="absolute inset-0 rounded-lg sm:rounded-xl overflow-hidden">
         <div className="absolute inset-0 animate-gradient-rotate">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 blur-xl opacity-75"></div>
         </div>
 
-        {/* Inner container with padding to show border */}
         <div className="relative w-full h-full p-0.5 sm:p-1">
           <div className="w-full h-full bg-black rounded-md sm:rounded-lg overflow-hidden">
             {mounted && streamURL ? (
