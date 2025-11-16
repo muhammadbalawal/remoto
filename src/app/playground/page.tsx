@@ -5,6 +5,8 @@ import Hls from "hls.js";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
+import { sendPrompt } from "../actions/sendPrompt";
+
 
 export default function PlaygroundPage() {
   const [inputValue, setInputValue] = useState("");
@@ -37,11 +39,17 @@ export default function PlaygroundPage() {
     }
   }, [transcript]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!inputValue.trim()) return;
     console.log("Submitted:", inputValue);
-    setInputValue("");
-    resetTranscript(); // Clear the transcript after submission
+    try {
+      console.log("Sending to FastAPI:", inputValue);
+      await sendPrompt(inputValue); 
+      setInputValue(""); // clear input
+      resetTranscript(); // clear speech transcript
+    } catch (err) {
+      console.error("Error sending prompt:", err);
+    }
   };
 
   // Toggle microphone listening
