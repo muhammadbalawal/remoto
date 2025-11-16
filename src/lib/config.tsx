@@ -11,7 +11,7 @@ import {
 export const BLUR_FADE_DELAY = 0.15;
 
 export const siteConfig = {
-  name: "Remoto Ai",
+  name: "Remoto AI",
   description: "Access devices out of reach from anywhere around the world.",
   cta: "Get Started",
   url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
@@ -29,7 +29,7 @@ export const siteConfig = {
     instagram: "https://instagram.com/aiagentsdk",
   },
   hero: {
-    title: "Remoto Ai",
+    title: "Remoto AI",
     description: "Access devices out of reach from anywhere around the world.",
     cta: "Get Started",
     ctaDescription: "",

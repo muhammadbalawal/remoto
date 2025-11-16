@@ -3,7 +3,7 @@
 import { AuroraText } from "@/components/aurora-text";
 import { Icons } from "@/components/icons";
 import { Section } from "@/components/section";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/genericButton";
 import { siteConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";

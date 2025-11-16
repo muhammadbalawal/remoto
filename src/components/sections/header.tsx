@@ -2,7 +2,7 @@
 
 import { Icons } from "@/components/icons";
 import { MobileDrawer } from "@/components/mobile-drawer";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/genericButton";
 import { easeInOutCubic } from "@/lib/animation";
 import { siteConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";

@@ -3,7 +3,7 @@
 import { Icons } from "@/components/icons";
 import { Section } from "@/components/section";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/genericButton";
 import { Ripple } from "@/components/ui/ripple";
 
 const contributors = [

@@ -2,7 +2,7 @@
 
 import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/genericButton";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { siteConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";

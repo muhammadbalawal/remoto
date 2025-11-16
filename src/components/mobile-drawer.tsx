@@ -1,5 +1,5 @@
 import { Icons } from "@/components/icons";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/genericButton";
 import {
   Drawer,
   DrawerContent,

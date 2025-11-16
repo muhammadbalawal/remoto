@@ -1,7 +1,7 @@
 "use client";
 
 import { Section } from "@/components/section";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/genericButton";
 import { siteConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
