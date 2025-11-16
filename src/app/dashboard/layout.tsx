@@ -104,14 +104,16 @@ export default function DashboardLayout({
           >
             Config
           </Link>
-        </nav>
 
-        {/* Sign Out Button */}
-        <div className="mt-auto pt-6">
-          <Button variant="default" className="w-full" onClick={handleSignOut}>
+          {/* Moved Sign Out Button under Config */}
+          <Button
+            variant="default"
+            className="w-full mt-2"
+            onClick={handleSignOut}
+          >
             Sign Out
           </Button>
-        </div>
+        </nav>
       </aside>
 
       {/* Main content */}
