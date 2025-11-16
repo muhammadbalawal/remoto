@@ -46,3 +46,108 @@ Live screen content is streamed using MediaMTX and FFmpeg for encoding, with glo
 ## Technical Implementation
 
 The system integrates multiple technologies including React for the user interface, Python for backend services, OpenCV and Tesseract for computer vision tasks, pyautogui for system control, and MediaMTX with Cloudflare for streaming delivery. Speech processing handles both input transcription and output audio responses, creating a seamless voice-controlled remote access experience.
+
+
+
+
+
+## Install guide for windows
+
+### Streaming Flow
+   
+   1. **MediaMtx** Install the lastest version and the path to your environment variable make sure the ymal file is in the same place as .exe : [https://mediamtx.org/](https://mediamtx.org/)
+   2. **FFmpeg** Install the lastest version and the path to your environment variable : [https://ffmpeg.org/](https://ffmpeg.org/)
+   3. **Cloudflare** I found it eazier to use `winget install Cloudflare.Cloudflared` to install Cloudflared.
+      
+   -   To stream your screen:
+       -  Setup .yml file first before you run MediaMtx
+         ```
+            logLevel: info
+            logDestinations: [stdout]
+            
+            # Global timeouts
+            readTimeout: 3600s
+            writeTimeout: 3600s
+            
+            # RTSP Server
+            rtsp: yes
+            rtspAddress: :8554
+            rtspTransports: [tcp]
+            rtspEncryption: "no"
+            
+            # HLS Server
+            hls: yes
+            hlsAddress: :8888
+            hlsEncryption: no
+            hlsAllowOrigin: '*'
+            hlsAlwaysRemux: yes
+            hlsVariant: lowLatency
+            hlsSegmentCount: 7
+            hlsSegmentDuration: 1s
+            hlsPartDuration: 200ms
+            hlsMuxerCloseAfter: 3600s
+            
+            # Disable unused
+            rtmp: no
+            webrtc: no
+            srt: no
+            api: no
+            metrics: no
+            pprof: no
+            playback: no
+            
+            # Paths
+            pathDefaults:
+              source: publisher
+            
+            paths:
+              screen:
+                source: publisher
+         ```
+       -  Run FFmpeg with options see all on [documentaion](https://ffmpeg.org/documentation.html)
+
+            ```
+            ONLY WORKS FOR COMPUTERS WITH NVIDIA GPUS
+            ffmpeg -f gdigrab -framerate 30 -i desktop \
+                 -vf fps=30 \
+                 -c:v h264_nvenc -preset p1 -tune ll \
+                 -b:v 3M -g 60 -keyint_min 60 \
+                 -f rtsp -rtsp_transport tcp \
+                 rtsp://127.0.0.1:8554/screen
+            
+            THIS IS FOR ANY WINDOWS COMPUTER (INCREDIBLY SLOW)
+            ffmpeg -f gdigrab -framerate 30 -i desktop \
+              -vf fps=30 \
+              -c:v libx264 -preset ultrafast -tune zerolatency \
+              -b:v 3M -g 60 -keyint_min 60 \
+              -f rtsp -rtsp_transport tcp \
+              rtsp://127.0.0.1:8554/screen
+            
+            AMD GPUS
+            ffmpeg -f gdigrab -framerate 30 -i desktop \
+              -vf fps=30 \
+              -c:v h264_amf -quality speed \
+              -b:v 3M -g 60 -keyint_min 60 \
+              -f rtsp -rtsp_transport tcp \
+              rtsp://127.0.0.1:8554/screen
+            ```
+       -  Use Cloudflare to open a port
+            ```cloudflared tunnel --url http://localhost:8888```
+
+### FrontEnd
+
+   1. Clone this repo.
+   2. Add a `.env.local` file that contains your Supabase credentials:
+   
+      ```env
+      NEXT_PUBLIC_SUPABASE_URL=
+      NEXT_PUBLIC_SUPABASE_ANON_KEY=
+      ```   
+
+### BackEnd
+
+
+## Install guide for MACOS
+
+
+
