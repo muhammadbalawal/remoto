@@ -3,6 +3,9 @@
 ## Project Overview
 Remote AI enables secure remote access and control of home computer through voice commands from anywhere in the world. The system combines speech recognition, AI agent processing, and real-time streaming to allow users to interact with their remote computers from any location. Users authenticate via Supabase and communicate through a React-based interface that translates voice commands into executable actions on the target machine.
 
+![Alt text](./public/Remoto.png)
+
+
 ## System Architecture
 
 ### Frontend Interface
