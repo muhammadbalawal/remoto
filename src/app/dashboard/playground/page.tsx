@@ -127,10 +127,10 @@ export default function PromptInput() {
   };
 
   return (
-    <div className="h-full w-full overflow-hidden flex flex-col items-center justify-center bg-background p-2 sm:p-4">
-      <div className="w-full max-w-5xl h-full flex flex-col gap-3 sm:gap-6 py-4">
-        {/* Video Stream - takes available space */}
-        <div className="flex-1 min-h-0">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-2 sm:p-4">
+      <div className="w-full max-w-5xl flex flex-col gap-3 sm:gap-6 py-4">
+        {/* Video Stream - natural height on mobile, constrained on desktop */}
+        <div className="w-full aspect-video max-h-[50vh] sm:max-h-[60vh] mx-auto">
           <ScreenStream />
         </div>
 

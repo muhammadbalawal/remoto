@@ -90,7 +90,7 @@ function DesktopHero({ showSpline }: { showSpline: boolean }) {
         </div>
       </div>
 
-      <div className="absolute top-0 right-0 w-1/2 h-full pointer-events-none overflow-visible">
+      <div className="absolute top-0 right-0 w-1/2 h-full pointer-events-none overflow-hidden">
         <Suspense>
           {showSpline && (
             <motion.div

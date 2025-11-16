@@ -41,7 +41,7 @@ export async function sendPrompt(text: string): Promise<VoiceResponse> {
     throw new Error("Backend URL not configured for this user");
   }
 
-  const res = await fetch(`${backendURL}/voice`, {
+  const res = await fetch(`${backendURL}voice`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
