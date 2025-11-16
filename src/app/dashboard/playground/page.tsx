@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
-import { sendPrompt } from "../actions/sendPrompt";
+import { sendPrompt } from "../../actions/sendPrompt";
 import ScreenStream from "@/components/ScreenStream";
 
 export default function PromptInput() {
