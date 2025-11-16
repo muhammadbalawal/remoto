@@ -53,18 +53,21 @@ export default function PromptInput() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <div className="w-full max-w-5xl space-y-6">
+    <div className="h-full w-full overflow-hidden flex flex-col items-center justify-center bg-background p-2 sm:p-4">
+      <div className="w-full max-w-5xl h-full flex flex-col gap-3 sm:gap-6 py-4">
+        {/* Video Stream - takes available space */}
+        <div className="flex-1 min-h-0">
+          <ScreenStream />
+        </div>
 
-        <ScreenStream />
         {/* Input Field with Microphone and Send buttons */}
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Send message or command..."
-            className="w-full rounded-full border-2 border-border bg-background px-6 py-4 pr-28 text-lg outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-full border-2 border-border bg-background px-4 sm:px-6 py-3 sm:py-4 pr-20 sm:pr-28 text-sm sm:text-lg outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleSubmit();
@@ -76,7 +79,7 @@ export default function PromptInput() {
           {browserSupportsSpeechRecognition && (
             <button
               onClick={toggleListening}
-              className={`absolute right-16 top-1/2 -translate-y-1/2 rounded-full p-3 transition-all ${
+              className={`absolute right-12 sm:right-16 top-1/2 -translate-y-1/2 rounded-full p-2 sm:p-3 transition-all ${
                 listening
                   ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -88,7 +91,7 @@ export default function PromptInput() {
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="h-5 w-5"
+                className="h-4 w-4 sm:h-5 sm:w-5"
               >
                 <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                 <path d="M19 10v1a7 7 0 0 1-14 0v-1a1 1 0 0 0-2 0v1a9 9 0 0 0 8 8.94V21H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-1.06A9 9 0 0 0 21 11v-1a1 1 0 1 0-2 0Z" />
@@ -99,7 +102,7 @@ export default function PromptInput() {
           {/* Send Button */}
           <button
             onClick={handleSubmit}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-primary p-3 text-primary-foreground transition-all hover:bg-primary/90"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-primary p-2 sm:p-3 text-primary-foreground transition-all hover:bg-primary/90"
             aria-label="Send"
           >
             <svg
@@ -110,7 +113,7 @@ export default function PromptInput() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5"
+              className="h-4 w-4 sm:h-5 sm:w-5"
             >
               <path d="M5 12h14" />
               <path d="m12 5 7 7-7 7" />
@@ -120,7 +123,7 @@ export default function PromptInput() {
 
         {/* Browser support warning */}
         {!browserSupportsSpeechRecognition && (
-          <div className="text-center text-sm text-muted-foreground">
+          <div className="text-center text-xs sm:text-sm text-muted-foreground flex-shrink-0">
             Speech recognition is not supported in your browser. Please use
             Chrome for the best experience.
           </div>

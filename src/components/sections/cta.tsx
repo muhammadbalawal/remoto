@@ -1,5 +1,5 @@
 import { Section } from "@/components/section";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/genericButton";
 
 export function CTA() {
   return (
