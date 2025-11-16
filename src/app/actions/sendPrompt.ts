@@ -2,7 +2,6 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 
-// Match the backend VoiceResponse model
 interface VoiceResponse {
   assistant_message: string;
   assistant_audio_base64: string | null;
@@ -13,7 +12,6 @@ interface VoiceResponse {
 }
 
 export async function sendPrompt(text: string): Promise<VoiceResponse> {
-  // Use server-side client
   const supabase = await createServerSupabase();
 
   const {
@@ -46,7 +44,7 @@ export async function sendPrompt(text: string): Promise<VoiceResponse> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       text,
-      history: [], // Add conversation history if you're tracking it
+      history: [],
     }),
     cache: "no-store",
   });

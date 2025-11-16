@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { createClientSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/genericButton";
 
-// shadcn/ui uses lucide-react
 import { LayoutDashboard, Settings, LogOut } from "lucide-react";
 
 export default function DashboardLayout({
@@ -25,7 +24,6 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Hamburger Button */}
       <div
         className="fixed left-0 top-0 z-50 cursor-pointer p-3"
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -61,7 +59,6 @@ export default function DashboardLayout({
         </svg>
       </div>
 
-      {/* Sidebar */}
       <aside
         className={`
           fixed top-0 left-0 h-screen
@@ -79,7 +76,6 @@ export default function DashboardLayout({
         <div className="flex items-center justify-center mb-6"></div>
 
         <nav className="flex flex-col gap-2 flex-1">
-          {/* Playground */}
           <Link
             href="/dashboard/playground"
             className="
@@ -90,10 +86,9 @@ export default function DashboardLayout({
             onClick={() => setSidebarOpen(false)}
           >
             <LayoutDashboard className="w-5 h-5" />
-            Playground
+            Remote
           </Link>
 
-          {/* Config */}
           <Link
             href="/dashboard/config"
             className="
@@ -107,7 +102,6 @@ export default function DashboardLayout({
             Config
           </Link>
 
-          {/* Sign Out */}
           <Button
             variant="default"
             className="w-full mt-2 flex items-center gap-3 justify-center"
@@ -119,7 +113,6 @@ export default function DashboardLayout({
         </nav>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 bg-background h-screen overflow-hidden">
         {children}
       </main>

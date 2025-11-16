@@ -13,10 +13,8 @@ export default function PromptInput() {
   const autoSubmitTimerRef = useRef<NodeJS.Timeout | null>(null);
   const previousTranscriptRef = useRef("");
 
-  // Silence detection timeout in milliseconds (e.g., 2000 = 2 seconds of silence)
   const SILENCE_DELAY = 2000;
 
-  // Speech recognition hook
   const {
     transcript,
     listening,
@@ -24,36 +22,29 @@ export default function PromptInput() {
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
 
-  // Update input field with speech transcript
   useEffect(() => {
     if (transcript) {
       setInputValue(transcript);
     }
   }, [transcript]);
 
-  // Auto-submit on silence detection
   useEffect(() => {
     if (listening && transcript) {
-      // Clear any existing timer
       if (autoSubmitTimerRef.current) {
         clearTimeout(autoSubmitTimerRef.current);
       }
 
-      // Check if transcript has changed (new speech detected)
       if (transcript !== previousTranscriptRef.current) {
         previousTranscriptRef.current = transcript;
 
-        // Set new timer - will trigger if no new speech for SILENCE_DELAY
         autoSubmitTimerRef.current = setTimeout(() => {
           SpeechRecognition.stopListening();
-          // Small delay to ensure transcript is captured before submit
           setTimeout(() => {
             handleSubmit();
           }, 100);
         }, SILENCE_DELAY);
       }
     } else if (!listening) {
-      // Clear timer and reset when not listening
       if (autoSubmitTimerRef.current) {
         clearTimeout(autoSubmitTimerRef.current);
         autoSubmitTimerRef.current = null;
@@ -61,7 +52,6 @@ export default function PromptInput() {
       previousTranscriptRef.current = "";
     }
 
-    // Cleanup on unmount
     return () => {
       if (autoSubmitTimerRef.current) {
         clearTimeout(autoSubmitTimerRef.current);
@@ -69,7 +59,6 @@ export default function PromptInput() {
     };
   }, [listening, transcript]);
 
-  // Function to play audio from base64
   const playAudio = (base64Audio: string) => {
     try {
       const byteCharacters = atob(base64Audio);
@@ -98,13 +87,12 @@ export default function PromptInput() {
       console.log("Sending to FastAPI:", inputValue);
       const result = await sendPrompt(inputValue);
 
-      // Play audio if available
       if (result.assistant_audio_base64) {
         playAudio(result.assistant_audio_base64);
       }
 
-      setInputValue(""); // clear input
-      resetTranscript(); // clear speech transcript
+      setInputValue(""); 
+      resetTranscript(); 
     } catch (err) {
       console.error("Error sending prompt:", err);
     } finally {
@@ -112,7 +100,6 @@ export default function PromptInput() {
     }
   };
 
-  // Toggle microphone listening
   const toggleListening = () => {
     if (listening) {
       SpeechRecognition.stopListening();
@@ -129,12 +116,10 @@ export default function PromptInput() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-2 sm:p-4">
       <div className="w-full max-w-5xl flex flex-col gap-3 sm:gap-6 py-4">
-        {/* Video Stream - natural height on mobile, constrained on desktop */}
         <div className="w-full aspect-video max-h-[50vh] sm:max-h-[60vh] mx-auto">
           <ScreenStream />
         </div>
 
-        {/* Input Field with Microphone and Send buttons */}
         <div className="relative flex-shrink-0">
           <input
             type="text"
@@ -149,13 +134,12 @@ export default function PromptInput() {
             }}
           />
 
-          {/* Microphone Button */}
           {browserSupportsSpeechRecognition && (
             <button
               onClick={toggleListening}
               className={`absolute right-12 sm:right-16 top-1/2 -translate-y-1/2 rounded-full p-2 sm:p-3 transition-all ${
                 listening
-                  ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 animate-pulse"
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
               aria-label={listening ? "Stop recording" : "Start recording"}
@@ -173,7 +157,6 @@ export default function PromptInput() {
             </button>
           )}
 
-          {/* Send Button */}
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
@@ -200,7 +183,6 @@ export default function PromptInput() {
           </button>
         </div>
 
-        {/* Browser support warning */}
         {!browserSupportsSpeechRecognition && (
           <div className="text-center text-xs sm:text-sm text-muted-foreground flex-shrink-0">
             Speech recognition is not supported in your browser. Please use

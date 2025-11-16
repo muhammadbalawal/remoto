@@ -12,7 +12,8 @@ export const BLUR_FADE_DELAY = 0.15;
 
 export const siteConfig = {
   name: "Remoto AI",
-  description: "Access devices out of reach from anywhere around the world.",
+  description:
+    "Securely access and control your home computer from anywhere in the world using an AI-powered agency.",
   cta: "Get Started",
   url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
   keywords: [
@@ -30,7 +31,8 @@ export const siteConfig = {
   },
   hero: {
     title: "Remoto AI",
-    description: "Access devices out of reach from anywhere around the world.",
+    description:
+      "Securely access and control your home computer from anywhere in the world using an AI-powered agency.",
     cta: "Get Started",
     ctaDescription: "",
   },

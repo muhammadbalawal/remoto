@@ -44,14 +44,12 @@ export default function SignupPage() {
   return (
     <main className="h-screen w-screen overflow-hidden flex items-center justify-center p-4">
       <div className="relative w-full max-w-sm">
-        {/* Animated gradient border wrapper */}
         <div className="absolute inset-0 rounded-2xl overflow-hidden">
           <div className="absolute inset-0 animate-gradient-rotate">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 blur-xl opacity-75"></div>
           </div>
         </div>
 
-        {/* Card with padding to show border */}
         <div className="relative p-[2px]">
           <Card className="w-full p-4 sm:p-6 shadow-xl rounded-2xl bg-background">
             <CardContent className="flex flex-col gap-3 sm:gap-4">
@@ -73,7 +71,7 @@ export default function SignupPage() {
 
                 <Input
                   type="password"
-                  placeholder="Password (min 6 chars)"
+                  placeholder="Password (min 6 character's)"
                   required
                   onChange={(e) => setPassword(e.target.value)}
                   className="text-sm sm:text-base"

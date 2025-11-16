@@ -24,7 +24,7 @@ export function Header() {
         </Link>
         <div className="hidden lg:block">
           <Link
-            href="#"
+            href="/login"
             className={cn(
               buttonVariants({ variant: "default" }),
               "h-8 text-primary-foreground rounded-lg group tracking-tight font-medium"
@@ -34,7 +34,7 @@ export function Header() {
           </Link>
         </div>
         <div className="mt-2 cursor-pointer block lg:hidden">
-          <MobileDrawer />
+          {/* <MobileDrawer /> */}
         </div>
       </div>
       <hr className="absolute w-full bottom-0" />

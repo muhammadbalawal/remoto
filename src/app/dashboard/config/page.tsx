@@ -5,9 +5,11 @@ import { createClientSupabase } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/genericInput";
 import { Button } from "@/components/ui/genericButton";
 import { Card, CardContent } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 
 export default function ConfigPage() {
   const supabase = createClientSupabase();
+  const router = useRouter();
 
   const [streamURL, setStreamURL] = useState("");
   const [backendURL, setBackendURL] = useState("");
@@ -15,7 +17,6 @@ export default function ConfigPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Load user config if exists
   useEffect(() => {
     const loadConfig = async () => {
       const {
@@ -61,7 +62,6 @@ export default function ConfigPage() {
       backendURL,
     };
 
-    // Insert or update
     const { error } = await supabase.from("UserConfig").upsert({
       id: user.id,
       json: jsonData,
@@ -72,21 +72,19 @@ export default function ConfigPage() {
     if (error) {
       setErrorMsg(error.message);
     } else {
-      setSuccessMsg("Configuration saved!");
+      router.push("/dashboard/playground");
     }
   };
 
   return (
     <main className="h-full w-full overflow-hidden flex justify-center items-center p-4">
       <div className="relative w-full max-w-lg">
-        {/* Animated gradient border wrapper */}
         <div className="absolute inset-0 rounded-2xl overflow-hidden">
           <div className="absolute inset-0 animate-gradient-rotate">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 blur-xl opacity-75"></div>
           </div>
         </div>
 
-        {/* Card with padding to show border */}
         <div className="relative p-[2px]">
           <Card className="w-full p-4 sm:p-6 rounded-2xl shadow-lg bg-background">
             <CardContent className="flex flex-col gap-4 sm:gap-6">
@@ -96,7 +94,7 @@ export default function ConfigPage() {
 
               <div className="flex flex-col gap-2 sm:gap-3">
                 <label className="font-medium text-sm sm:text-base">
-                  Stream URL
+                  Screen Share URL
                 </label>
                 <Input
                   placeholder="rtsp://your-stream-url"
@@ -108,7 +106,7 @@ export default function ConfigPage() {
 
               <div className="flex flex-col gap-2 sm:gap-3">
                 <label className="font-medium text-sm sm:text-base">
-                  Backend URL
+                  AI Model URLc
                 </label>
                 <Input
                   placeholder="https://your-backend-api.com"
