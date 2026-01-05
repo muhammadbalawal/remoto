@@ -35,7 +35,7 @@ class Orchestrator:
         self.stream_tunnel = TunnelManager(self.logs_dir, self.data_dir, port=8888, name="stream_tunnel")
         self.backend = BackendManager(self.base_dir / "server", self.logs_dir, self.data_dir)
     
-    def start(self, open_browser=True, start_frontend=True):
+    def start(self, start_frontend=True):
         """Start all services"""
         try:
             # Check dependencies first

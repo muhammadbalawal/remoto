@@ -1,29 +1,34 @@
 # Remote AI - Remote Computer Control System
 
 ## Project Overview
+
 Remote AI enables secure remote access and control of home computer through voice commands from anywhere in the world. The system combines speech recognition, AI agent processing, and real-time streaming to allow users to interact with their remote computers from any location. Users authenticate via Supabase and communicate through a React-based interface that translates voice commands into executable actions on the target machine.
 
 ![Alt text](./public/Remoto.png)
 
-
 ## System Architecture
 
 ### Frontend Interface
+
 Built with React and react-speech-recognition for speech-to-text conversion. The interface handles user authentication through Supabase and provides real-time video streaming from the remote computer.
 
 ### Backend Services
-A Python service runs persistently on the local computer, managing authentication, command execution, and media streaming. 
+
+A Python service runs persistently on the local computer, managing authentication, command execution, and media streaming.
 
 ### AI Agent Core
+
 The custom AI agent processes user commands through multiple stages:
-- Receives transcribed text from speech input
-- Captures screen content using OpenCV for image processing
-- Extracts textual context using Tesseract OCR
-- Analyzes screen state and user intent to generate executable commands
-- Executes actions via pyautogui for keyboard and mouse control
-- Provides audio confirmation through Google Text-to-Speech
+
+-   Receives transcribed text from speech input
+-   Captures screen content using OpenCV for image processing
+-   Extracts textual context using Tesseract OCR
+-   Analyzes screen state and user intent to generate executable commands
+-   Executes actions via pyautogui for keyboard and mouse control
+-   Provides audio confirmation through Google Text-to-Speech
 
 ### Media Streaming Pipeline
+
 Live screen content is streamed using MediaMTX and FFmpeg for encoding, with global delivery handled through Cloudflare. This ensures low-latency visual feedback to users during remote sessions.
 
 ## Workflow Process
@@ -47,278 +52,119 @@ Live screen content is streamed using MediaMTX and FFmpeg for encoding, with glo
 
 The system integrates multiple technologies including React for the user interface, Python for backend services, OpenCV and Tesseract for computer vision tasks, pyautogui for system control, and MediaMTX with Cloudflare for streaming delivery. Speech processing handles both input transcription and output audio responses, creating a seamless voice-controlled remote access experience.
 
+## Quick Start
 
+### Installation
 
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/remoto.git
+cd remoto
 
+# Install the package
+pip install -e .
+```
 
-## Install guide for windows
+### First Run
 
-### Streaming Flow
-   
-   1. **MediaMtx** Install the lastest version and the path to your environment variable make sure the ymal file is in the same place as .exe : [https://mediamtx.org/](https://mediamtx.org/)
-   2. **FFmpeg** Install the lastest version and the path to your environment variable : [https://ffmpeg.org/](https://ffmpeg.org/)
-   3. **Cloudflare** I found it eazier to use `winget install Cloudflare.Cloudflared` to install Cloudflared.
-      
-   -   To stream your screen:
-       -  Setup .yml file first before you run MediaMtx
-         ```
-            logLevel: info
-            logDestinations: [stdout]
-            
-            # Global timeouts
-            readTimeout: 3600s
-            writeTimeout: 3600s
-            
-            # RTSP Server
-            rtsp: yes
-            rtspAddress: :8554
-            rtspTransports: [tcp]
-            rtspEncryption: "no"
-            
-            # HLS Server
-            hls: yes
-            hlsAddress: :8888
-            hlsEncryption: no
-            hlsAllowOrigin: '*'
-            hlsAlwaysRemux: yes
-            hlsVariant: lowLatency
-            hlsSegmentCount: 7
-            hlsSegmentDuration: 1s
-            hlsPartDuration: 200ms
-            hlsMuxerCloseAfter: 3600s
-            
-            # Disable unused
-            rtmp: no
-            webrtc: no
-            srt: no
-            api: no
-            metrics: no
-            pprof: no
-            playback: no
-            
-            # Paths
-            pathDefaults:
-              source: publisher
-            
-            paths:
-              screen:
-                source: publisher
-         ```
-       -  Run FFmpeg with options see all on [documentaion](https://ffmpeg.org/documentation.html)
+```bash
+# Check and install dependencies
+remoto setup
 
-            ```
-            ONLY WORKS FOR COMPUTERS WITH NVIDIA GPUS
-            ffmpeg -f gdigrab -framerate 30 -i desktop \
-                 -vf fps=30 \
-                 -c:v h264_nvenc -preset p1 -tune ll \
-                 -b:v 3M -g 60 -keyint_min 60 \
-                 -f rtsp -rtsp_transport tcp \
-                 rtsp://127.0.0.1:8554/screen
-            
-            THIS IS FOR ANY WINDOWS COMPUTER (INCREDIBLY SLOW)
-            ffmpeg -f gdigrab -framerate 30 -i desktop \
-              -vf fps=30 \
-              -c:v libx264 -preset ultrafast -tune zerolatency \
-              -b:v 3M -g 60 -keyint_min 60 \
-              -f rtsp -rtsp_transport tcp \
-              rtsp://127.0.0.1:8554/screen
-            
-            AMD GPUS
-            ffmpeg -f gdigrab -framerate 30 -i desktop \
-              -vf fps=30 \
-              -c:v h264_amf -quality speed \
-              -b:v 3M -g 60 -keyint_min 60 \
-              -f rtsp -rtsp_transport tcp \
-              rtsp://127.0.0.1:8554/screen
-            ```
-       -  Use Cloudflare to open a port
-            ```cloudflared tunnel --url http://localhost:8888```
+# Start all services
+remoto start
+```
 
-### FrontEnd
+## CLI Commands
 
-   1. Clone this repo.
-   2. Add a `.env.local` file that contains your Supabase credentials:
-   
-      ```env
-      NEXT_PUBLIC_SUPABASE_URL=
-      NEXT_PUBLIC_SUPABASE_ANON_KEY=
-      ```   
+```bash
+remoto start          # Start all services
+remoto stop           # Stop all services
+remoto restart        # Restart all services
+remoto status         # Show status of all services (includes URLs)
+remoto setup          # Check and install dependencies
+remoto password       # Show current session password
+remoto password show  # Show current session password (explicit)
+remoto password set   # Set a new session password
+```
 
-### BackEnd
-   [github](https://github.com/aleburrascano/remoto-backend)
+### Password Management
 
-## Install guide for MACOS
+Manage your session password with the `password` command:
 
+```bash
+# Show current password
+remoto password
+# or
+remoto password show
 
-      ## RemotoMacQuickInstall
-      ```
-      #!/bin/bash
-      set -e  
-      if [[ "$OSTYPE" != "darwin"* ]]; then
-          exit 1
-      fi
-      
-      if ! command -v brew &> /dev/null; then
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          if [[ $(uname -m) == "arm64" ]]; then
-              echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
-              eval "$(/opt/homebrew/bin/brew shellenv)"
-          fi
-      fi
-      
-      if ! brew list mediamtx &> /dev/null; then
-          brew install mediamtx
-      fi
-      
-      if ! brew list ffmpeg &> /dev/null; then
-          brew install ffmpeg
-      fi
-      
-      if ! brew list cloudflared &> /dev/null; then
-          brew install cloudflare/cloudflare/cloudflared
-      fi
-      
-      CONFIG_DIR="/opt/homebrew/etc/mediamtx"
-      mkdir -p "$CONFIG_DIR"
-      
-      if [ -f "$CONFIG_DIR/mediamtx.yml" ]; then
-          cp "$CONFIG_DIR/mediamtx.yml" "$CONFIG_DIR/mediamtx.yml.backup.$(date +%s)"
-      fi
-      
-      cat > "$CONFIG_DIR/mediamtx.yml" << 'EOF'
-      logLevel: info
-      logDestinations: [stdout]
-      readTimeout: 10s
-      writeTimeout: 10s
-      writeQueueSize: 512
-      udpMaxPayloadSize: 1472
-      
-      authMethod: internal
-      authInternalUsers:
-      - user: any
-        pass:
-        ips: []
-        permissions:
-        - action: publish
-        - action: read
-        - action: playback
-      
-      rtsp: yes
-      rtspAddress: :8554
-      rtspTransports: [tcp]
-      rtspEncryption: "no"
-      
-      hls: yes
-      hlsAddress: :8888
-      hlsEncryption: no
-      hlsAllowOrigin: '*'
-      hlsAlwaysRemux: yes
-      hlsVariant: lowLatency
-      hlsSegmentCount: 7
-      hlsSegmentDuration: 1s
-      hlsPartDuration: 200ms
-      hlsSegmentMaxSize: 50M
-      hlsDirectory: ''
-      
-      rtmp: no
-      webrtc: no
-      srt: no
-      api: no
-      metrics: no
-      pprof: no
-      playback: no
-      
-      pathDefaults:
-        source: publisher
-        record: no
-      
-      paths:
-        screen:
-          source: publisher
-      EOF
-      
-      SCRIPTS_DIR="$HOME/.screen-streaming"
-      mkdir -p "$SCRIPTS_DIR"
-      
-      cat > "$SCRIPTS_DIR/start-streaming.sh" << 'STARTEOF'
-      #!/bin/bash
-      
-      brew services start mediamtx
-      sleep 3
-      
-      ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep "AVFoundation video devices" -A 20 | grep "\[AVFoundation"
-      
-      read -p "Enter display number (usually 0, 1, 2, or 3): " DISPLAY_NUM
-      
-      ffmpeg -f avfoundation -pixel_format nv12 -framerate 30 -i "$DISPLAY_NUM" \
-        -vf fps=30 \
-        -vsync 1 \
-        -c:v h264_videotoolbox -b:v 5M \
-        -g 30 -keyint_min 30 \
-        -f rtsp rtsp://127.0.0.1:8554/screen &
-      
-      FFMPEG_PID=$!
-      sleep 3
-      
-      cloudflared tunnel --url http://localhost:8888
-      
-      trap "kill $FFMPEG_PID 2>/dev/null; brew services stop mediamtx" EXIT
-      STARTEOF
-      
-      chmod +x "$SCRIPTS_DIR/start-streaming.sh"
-      
-      cat > "$SCRIPTS_DIR/stop-streaming.sh" << 'STOPEOF'
-      #!/bin/bash
-      
-      pkill -f "ffmpeg.*rtsp://127.0.0.1:8554/screen"
-      pkill cloudflared
-      brew services stop mediamtx
-      STOPEOF
-      
-      chmod +x "$SCRIPTS_DIR/stop-streaming.sh"
-      
-      cat > "$SCRIPTS_DIR/status.sh" << 'STATUSEOF'
-      #!/bin/bash
-      
-      brew services list | grep mediamtx
-      
-      if pgrep -f "ffmpeg.*rtsp://127.0.0.1:8554/screen" > /dev/null; then
-          pgrep -f "ffmpeg.*rtsp://127.0.0.1:8554/screen"
-      fi
-      
-      if pgrep cloudflared > /dev/null; then
-          pgrep cloudflared
-      fi
-      STATUSEOF
-      
-      chmod +x "$SCRIPTS_DIR/status.sh"
-      
-      if [[ ":$PATH:" != *":$SCRIPTS_DIR:"* ]]; then
-          echo "export PATH=\"\$PATH:$SCRIPTS_DIR\"" >> ~/.zshrc
-      fi
-      
-      ```
+# Generate a random password
+remoto password set --generate
+# or
+remoto password set -g
 
-      ## REMOOOTO MAC REQUIREMENTS
+# Set a specific password
+remoto password set --new-password "MySecurePass123"
+# or
+remoto password set -p "MySecurePass123"
 
-      mediamtx v1.15.3
-      
-      ffmpeg version 8.0
-      
-      cloudflared version 2025.11.1
-      
-      QUICK START GUIDE:
-      
-      Run RemotoMacQuickInstall to install all dependencies.
-      
-      Then in three separate terminal windows run:
+# Interactive prompt (press Enter to generate random)
+remoto password set
+```
 
-      1. brew services start mediamtx
-      2. ffmpeg -f avfoundation -pixel_format nv12 -framerate 30 -i "3" -vf fps=30 -c:v h264_videotoolbox -b:v 3M -g 60 -keyint_min 60 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/screen
-      3. cloudflared tunnel --url http://localhost:8888
+**Note:** If the backend is running when you change the password, it will automatically restart with the new password.
 
-      Copy paste the link that looks like this, https://[your-tunnel-name].trycloudflare.com, add /screen to the end, and paste it into
-      livestream url in config.
+### Command Options
 
+```bash
+remoto start --no-frontend   # Start backend only (no web UI)
+```
 
+## Security Notes
 
+-   **Session Passwords**: Passwords are auto-generated for each session and stored locally in `~/.remoto/data/session_password.txt`
+-   **Password Management**: Use `remoto password set` to change your password at any time
+-   **Password Requirements**: Passwords must be at least 8 characters long
+-   **Secure Communication**: All communication goes through Cloudflare tunnels (HTTPS)
+-   **HTTP Basic Auth**: API endpoints are protected with HTTP Basic Authentication
+-   **Environment Variables**: Never commit `.env` files or session passwords to version control
+-   **API Keys**: Store your `ANTHROPIC_API_KEY` in a `.env` file (not committed to git)
+
+## Troubleshooting
+
+### Services won't start
+
+```bash
+# Check dependencies
+remoto setup
+
+# Check service status
+remoto status
+
+# View logs (stored in ~/.remoto/logs/)
+```
+
+### Password issues
+
+```bash
+# View current password
+remoto password
+
+# Change password
+remoto password set --generate
+
+# If backend needs restart after password change
+remoto restart
+```
+
+### FFmpeg encoding issues
+
+-   Ensure your GPU drivers are up to date
+-   Check that hardware encoding is supported: `ffmpeg -encoders | grep nvenc`
+-   The CLI will automatically fall back to CPU encoding if needed
+
+### Cloudflare tunnel issues
+
+-   Ensure Cloudflared is installed and in PATH
+-   Check firewall settings
+-   Try restarting: `remoto restart`
