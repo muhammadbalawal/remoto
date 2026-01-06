@@ -27,12 +27,6 @@ class DependencyInstaller:
     @staticmethod
     def find_command_path(command):
         """Find the full path to a command, checking Homebrew paths on macOS"""
-        # First try: Use shutil.which (checks PATH)
-        path = shutil.which(command)
-        if path:
-            return path
-        
-        # On macOS, check common Homebrew installation paths
         if DependencyInstaller.is_mac():
             brew_paths = [
                 "/opt/homebrew/bin",  # Apple Silicon
@@ -44,6 +38,10 @@ class DependencyInstaller:
                 full_path = os.path.join(brew_path, command)
                 if os.path.exists(full_path) and os.access(full_path, os.X_OK):
                     return full_path
+        
+        path = shutil.which(command)
+        if path:
+            return path
         
         return None
     
