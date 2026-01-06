@@ -25,6 +25,29 @@ class DependencyInstaller:
         return platform.system() == "Linux"
     
     @staticmethod
+    def find_command_path(command):
+        """Find the full path to a command, checking Homebrew paths on macOS"""
+        # First try: Use shutil.which (checks PATH)
+        path = shutil.which(command)
+        if path:
+            return path
+        
+        # On macOS, check common Homebrew installation paths
+        if DependencyInstaller.is_mac():
+            brew_paths = [
+                "/opt/homebrew/bin",  # Apple Silicon
+                "/usr/local/bin",      # Intel Mac
+                os.path.expanduser("~/homebrew/bin"),  # Custom install
+            ]
+            
+            for brew_path in brew_paths:
+                full_path = os.path.join(brew_path, command)
+                if os.path.exists(full_path) and os.access(full_path, os.X_OK):
+                    return full_path
+        
+        return None
+    
+    @staticmethod
     def check_command(command):
         """Check if a command exists"""
         # On Windows, try multiple approaches since PATH might not be fully available
@@ -108,13 +131,14 @@ class DependencyInstaller:
             
             return False
         else:
-            # On Unix-like systems, use shutil.which first
-            if shutil.which(command) is None:
+            # On Unix-like systems, find command path (checks Homebrew on macOS)
+            cmd_path = DependencyInstaller.find_command_path(command)
+            if cmd_path is None:
                 return False
             
             # Verify it actually works
             try:
-                result = subprocess.run([command, "--version"], 
+                result = subprocess.run([cmd_path, "--version"], 
                              capture_output=True, 
                              text=True,
                              check=True,

@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 
 from cli.utils.process import ProcessManager
 from cli.utils.logger import Logger
+from cli.utils.installer import DependencyInstaller
 
 
 class FFmpegManager:
