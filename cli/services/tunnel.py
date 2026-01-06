@@ -8,6 +8,7 @@ from typing import Optional
 
 from cli.utils.process import ProcessManager
 from cli.utils.logger import Logger
+from cli.utils.installer import DependencyInstaller
 
 
 class TunnelManager:
@@ -63,20 +64,26 @@ class TunnelManager:
                 with open(self.url_file) as f:
                     return f.read().strip()
         
-        # Check if cloudflared is installed
-        try:
-            subprocess.run(["cloudflared", "--version"], 
-                         capture_output=True, 
-                         check=True,
-                         timeout=5)
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        # Find cloudflared path (checks Homebrew paths on macOS)
+        cloudflared_path = DependencyInstaller.find_command_path("cloudflared")
+        if cloudflared_path is None:
             Logger.error("Cloudflared not found. Please install it first.")
             Logger.error("Windows: winget install Cloudflare.Cloudflared")
             Logger.error("Mac: brew install cloudflared")
             sys.exit(1)
         
+        # Check if cloudflared works
+        try:
+            subprocess.run([cloudflared_path, "--version"], 
+                         capture_output=True, 
+                         check=True,
+                         timeout=5)
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            Logger.error("Cloudflared found but failed to execute. Please check installation.")
+            sys.exit(1)
+        
         # Start tunnel for specified port
-        cmd = ["cloudflared", "tunnel", "--url", f"http://localhost:{self.port}"]
+        cmd = [cloudflared_path, "tunnel", "--url", f"http://localhost:{self.port}"]
         self.process = ProcessManager.start_process_capture(cmd, self.log_file)
         ProcessManager.save_pid(self.pid_file, self.process.pid)
         
