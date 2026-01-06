@@ -443,7 +443,24 @@ class DependencyInstaller:
                 return False
     
     @staticmethod
-    def check_and_install_all():
+    @staticmethod
+    def check_macos_streaming_setup():
+        """Check if macOS streaming is properly set up via Homebrew"""
+        # Check if remoto scripts exist in ~/.remoto
+        remoto_dir = Path.home() / ".remoto"
+        start_script = remoto_dir / "start.sh"
+        
+        if not start_script.exists():
+            return False
+        
+        # Check if script is executable
+        if not os.access(start_script, os.X_OK):
+            return False
+        
+        return True
+    
+    @staticmethod
+    def check_and_install_all(is_macos=False):
         """Check and install all dependencies"""
         missing = []
         
@@ -451,28 +468,37 @@ class DependencyInstaller:
         Logger.info("Checking dependencies...")
         print("")
         
-        # Check Cloudflared
-        if not DependencyInstaller.check_command("cloudflared"):
-            Logger.warning("Cloudflared not found")
-            missing.append("cloudflared")
+        # On macOS, check for remoto streaming setup instead of individual services
+        if is_macos:
+            if not DependencyInstaller.check_macos_streaming_setup():
+                Logger.warning("remoto-start setup not found")
+                Logger.info("This is typically installed via Homebrew tap: brew install marcolipari/remoto/remoto-mac")
+                missing.append("remoto-streaming")
+            else:
+                Logger.success("remoto-start streaming setup found")
         else:
-            Logger.success("Cloudflared found")
+            # Check Cloudflared
+            if not DependencyInstaller.check_command("cloudflared"):
+                Logger.warning("Cloudflared not found")
+                missing.append("cloudflared")
+            else:
+                Logger.success("Cloudflared found")
+            
+            # Check FFmpeg
+            if not DependencyInstaller.check_command("ffmpeg"):
+                Logger.warning("FFmpeg not found")
+                missing.append("ffmpeg")
+            else:
+                Logger.success("FFmpeg found")
+            
+            # Check MediaMTX
+            if not DependencyInstaller.check_command("mediamtx"):
+                Logger.warning("MediaMTX not found")
+                missing.append("mediamtx")
+            else:
+                Logger.success("MediaMTX found")
         
-        # Check FFmpeg
-        if not DependencyInstaller.check_command("ffmpeg"):
-            Logger.warning("FFmpeg not found")
-            missing.append("ffmpeg")
-        else:
-            Logger.success("FFmpeg found")
-        
-        # Check MediaMTX
-        if not DependencyInstaller.check_command("mediamtx"):
-            Logger.warning("MediaMTX not found")
-            missing.append("mediamtx")
-        else:
-            Logger.success("MediaMTX found")
-        
-        # Check Tesseract OCR
+        # Check Tesseract OCR (needed on all platforms)
         if not DependencyInstaller.check_command("tesseract"):
             Logger.warning("Tesseract OCR not found")
             missing.append("tesseract")
@@ -487,6 +513,16 @@ class DependencyInstaller:
         
         # Ask user if they want to auto-install
         print("\nMissing dependencies:", ", ".join(missing))
+        
+        if is_macos:
+            print("\nOn macOS, please install via Homebrew:")
+            print("  brew install marcolipari/remoto/remoto-mac")
+            print("\nAfter installation:")
+            print("  1. Close this terminal")
+            print("  2. Open a new terminal")
+            print("  3. Run: remoto start")
+            return False
+        
         response = input("\nAttempt auto-install? (y/n): ")
         if response.lower() != 'y':
             Logger.info("Please install manually and try again")

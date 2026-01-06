@@ -24,8 +24,17 @@ import numpy as np
 import sys
 import shutil
 from pathlib import Path
+import json
 
 load_dotenv()
+
+# ============= TEST MODE =============
+TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
+if TEST_MODE:
+    print("\n" + "=" * 60)
+    print("⚠️  TEST MODE ENABLED - Using mock Claude responses")
+    print("Set TEST_MODE=false and provide ANTHROPIC_API_KEY to use real API")
+    print("=" * 60 + "\n")
 
 # Configure Tesseract path if needed (Windows)
 if sys.platform == 'win32':
@@ -411,12 +420,53 @@ def text_to_speech(text: str) -> Optional[str]:
         print(f"TTS error: {e}")
         return None
 
+def get_mock_claude_response(user_message: str, screenshot_b64: str, ocr_text: str) -> tuple[str, str, str]:
+    """
+    Generate a mock response for testing without API key
+    Returns: (voice_response, code_to_execute, full_response)
+    """
+    # Simple mock responses based on keywords in the user message
+    message_lower = user_message.lower()
+    
+    if any(word in message_lower for word in ['click', 'button', 'press']):
+        voice_response = "I'll click on that for you now."
+        code = "pyautogui.click(500, 300)\ntime.sleep(0.5)"
+        full_response = f"<voice>{voice_response}</voice>\n<code>{code}</code>"
+    elif any(word in message_lower for word in ['type', 'write', 'enter', 'text']):
+        voice_response = "Let me type that for you."
+        code = "pyautogui.typewrite('test input')\ntime.sleep(0.5)"
+        full_response = f"<voice>{voice_response}</voice>\n<code>{code}</code>"
+    elif any(word in message_lower for word in ['scroll', 'down', 'up']):
+        voice_response = "I'll scroll for you."
+        code = "pyautogui.scroll(-3)\ntime.sleep(0.5)"
+        full_response = f"<voice>{voice_response}</voice>\n<code>{code}</code>"
+    elif any(word in message_lower for word in ['hello', 'hi', 'hey', 'how are you']):
+        voice_response = "Hello! I'm your AI assistant. I'm here to help you control your computer by voice. Try asking me to click, type, or scroll."
+        code = ""
+        full_response = f"<voice>{voice_response}</voice>"
+    else:
+        # Default response
+        voice_response = f"I understood your request: '{user_message}'. In test mode, I'm using mock responses. To use real Claude AI, set TEST_MODE=false and provide your ANTHROPIC_API_KEY."
+        code = ""
+        full_response = f"<voice>{voice_response}</voice>"
+    
+    return voice_response, code, full_response
+
 def ask_claude_voice(user_message: str, screenshot_b64: str, ocr_text: str, conversation_history: Optional[List[ChatMessage]] = None) -> tuple[str, str, str]:
     """
     Ask Claude to execute a voice instruction with OCR data
     Returns: (voice_response, code_to_execute, full_response)
     """
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    # Use mock response if in TEST_MODE
+    if TEST_MODE:
+        return get_mock_claude_response(user_message, screenshot_b64, ocr_text)
+    
+    # Use real Claude API
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY not set. Either set it or enable TEST_MODE=true")
+    
+    client = anthropic.Anthropic(api_key=api_key)
     
     messages = []
     

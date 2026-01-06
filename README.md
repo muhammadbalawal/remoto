@@ -20,12 +20,12 @@ A Python service runs persistently on the local computer, managing authenticatio
 
 The custom AI agent processes user commands through multiple stages:
 
--   Receives transcribed text from speech input
--   Captures screen content using OpenCV for image processing
--   Extracts textual context using Tesseract OCR
--   Analyzes screen state and user intent to generate executable commands
--   Executes actions via pyautogui for keyboard and mouse control
--   Provides audio confirmation through Google Text-to-Speech
+- Receives transcribed text from speech input
+- Captures screen content using OpenCV for image processing
+- Extracts textual context using Tesseract OCR
+- Analyzes screen state and user intent to generate executable commands
+- Executes actions via pyautogui for keyboard and mouse control
+- Provides audio confirmation through Google Text-to-Speech
 
 ### Media Streaming Pipeline
 
@@ -123,13 +123,13 @@ remoto start --skip-check    # Skip dependency check (use if dependencies are in
 
 ## Security Notes
 
--   **Session Passwords**: Passwords are auto-generated for each session and stored locally in `~/.remoto/data/session_password.txt`
--   **Password Management**: Use `remoto password set` to change your password at any time
--   **Password Requirements**: Passwords must be at least 8 characters long
--   **Secure Communication**: All communication goes through Cloudflare tunnels (HTTPS)
--   **HTTP Basic Auth**: API endpoints are protected with HTTP Basic Authentication
--   **Environment Variables**: Never commit `.env` files or session passwords to version control
--   **API Keys**: Store your `ANTHROPIC_API_KEY` in a `.env` file (not committed to git)
+- **Session Passwords**: Passwords are auto-generated for each session and stored locally in `~/.remoto/data/session_password.txt`
+- **Password Management**: Use `remoto password set` to change your password at any time
+- **Password Requirements**: Passwords must be at least 8 characters long
+- **Secure Communication**: All communication goes through Cloudflare tunnels (HTTPS)
+- **HTTP Basic Auth**: API endpoints are protected with HTTP Basic Authentication
+- **Environment Variables**: Never commit `.env` files or session passwords to version control
+- **API Keys**: Store your `ANTHROPIC_API_KEY` in a `.env` file (not committed to git)
 
 ## Troubleshooting
 
@@ -142,7 +142,7 @@ remoto setup
 # Check service status
 remoto status
 
-# View logs (stored in ~/.remoto/logs/)
+# View logs (stored in /Users/marcolipari/remoto/logs/)
 ```
 
 ### Password issues
@@ -160,12 +160,12 @@ remoto restart
 
 ### FFmpeg encoding issues
 
--   Ensure your GPU drivers are up to date
--   Check that hardware encoding is supported: `ffmpeg -encoders | grep nvenc`
--   The CLI will automatically fall back to CPU encoding if needed
+- Ensure your GPU drivers are up to date
+- Check that hardware encoding is supported: `ffmpeg -encoders | grep nvenc`
+- The CLI will automatically fall back to CPU encoding if needed
 
 ### Cloudflare tunnel issues
 
--   Ensure Cloudflared is installed and in PATH
--   Check firewall settings
--   Try restarting: `remoto restart`
+- Ensure Cloudflared is installed and in PATH
+- Check firewall settings
+- Try restarting: `remoto restart`
