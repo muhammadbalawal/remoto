@@ -20,10 +20,11 @@ def main():
 
 @main.command()
 @click.option('--no-frontend', is_flag=True, help="Don't start frontend (backend only)")
-def start(no_frontend):
+@click.option('--skip-check', is_flag=True, help="Skip dependency check (use if you know dependencies are installed)")
+def start(no_frontend, skip_check):
     """Start all Remote AI services"""
     orchestrator = Orchestrator()
-    orchestrator.start(start_frontend=not no_frontend)
+    orchestrator.start(start_frontend=not no_frontend, skip_dependency_check=skip_check)
 
 
 @main.command()

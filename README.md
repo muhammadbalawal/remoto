@@ -118,6 +118,7 @@ remoto password set
 
 ```bash
 remoto start --no-frontend   # Start backend only (no web UI)
+remoto start --skip-check    # Skip dependency check (use if dependencies are installed)
 ```
 
 ## Security Notes

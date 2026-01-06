@@ -35,13 +35,17 @@ class Orchestrator:
         self.stream_tunnel = TunnelManager(self.logs_dir, self.data_dir, port=8888, name="stream_tunnel")
         self.backend = BackendManager(self.base_dir / "server", self.logs_dir, self.data_dir)
     
-    def start(self, start_frontend=True):
+    def start(self, start_frontend=True, skip_dependency_check=False):
         """Start all services"""
         try:
-            # Check dependencies first
-            if not DependencyInstaller.check_and_install_all():
-                Logger.error("Missing dependencies. Please install them and try again.")
-                sys.exit(1)
+            # Check dependencies first (unless skipped)
+            if not skip_dependency_check:
+                if not DependencyInstaller.check_and_install_all():
+                    Logger.error("Missing dependencies. Please install them and try again.")
+                    sys.exit(1)
+            else:
+                Logger.info("Skipping dependency check...")
+                print("")
             
             Logger.info("Starting Remote AI...")
             print("")
