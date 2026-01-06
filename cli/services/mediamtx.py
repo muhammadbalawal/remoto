@@ -7,6 +7,7 @@ from typing import Optional
 
 from cli.utils.process import ProcessManager
 from cli.utils.logger import Logger
+from cli.utils.installer import DependencyInstaller
 
 
 class MediaMTXManager:
@@ -93,16 +94,22 @@ paths:
         # Ensure config exists
         self._ensure_config()
         
-        # Check if mediamtx is installed
+        # Find mediamtx path (checks Homebrew paths on macOS)
+        mediamtx_path = DependencyInstaller.find_command_path("mediamtx")
+        if mediamtx_path is None:
+            Logger.error("MediaMTX not found. Please install it first.")
+            Logger.error("Windows: Download from https://mediamtx.org/")
+            Logger.error("Mac: brew install mediamtx")
+            sys.exit(1)
+        
+        # Check if mediamtx works
         try:
-            subprocess.run(["mediamtx", "--version"], 
+            subprocess.run([mediamtx_path, "--version"], 
                          capture_output=True, 
                          check=True,
                          timeout=5)
         except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-            Logger.error("MediaMTX not found. Please install it first.")
-            Logger.error("Windows: Download from https://mediamtx.org/")
-            Logger.error("Mac: brew install mediamtx")
+            Logger.error("MediaMTX found but failed to execute. Please check installation.")
             sys.exit(1)
         
         # Find config file
@@ -118,7 +125,7 @@ paths:
                 break
         
         # Start MediaMTX
-        cmd = ["mediamtx"]
+        cmd = [mediamtx_path]
         if config_path:
             cmd.append(str(config_path))
         

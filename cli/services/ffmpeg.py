@@ -150,20 +150,29 @@ class FFmpegManager:
             Logger.warning("FFmpeg is already running")
             return
         
-        # Check if ffmpeg is installed
-        try:
-            subprocess.run(["ffmpeg", "-version"], 
-                         capture_output=True, 
-                         check=True,
-                         timeout=5)
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        # Find ffmpeg path (checks Homebrew paths on macOS)
+        ffmpeg_path = DependencyInstaller.find_command_path("ffmpeg")
+        if ffmpeg_path is None:
             Logger.error("FFmpeg not found. Please install it first.")
             Logger.error("Windows: Download from https://ffmpeg.org/")
             Logger.error("Mac: brew install ffmpeg")
             sys.exit(1)
         
-        # Get command
+        # Check if ffmpeg works
+        try:
+            subprocess.run([ffmpeg_path, "-version"], 
+                         capture_output=True, 
+                         check=True,
+                         timeout=5)
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            Logger.error("FFmpeg found but failed to execute. Please check installation.")
+            sys.exit(1)
+        
+        # Get command and replace "ffmpeg" with full path
         cmd = self._get_ffmpeg_command()
+        # Replace "ffmpeg" with the full path
+        if cmd[0] == "ffmpeg":
+            cmd[0] = ffmpeg_path
         gpu = self._detect_gpu()
         Logger.info(f"Using {gpu.upper()} encoder")
         
