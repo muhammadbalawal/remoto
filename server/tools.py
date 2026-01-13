@@ -277,11 +277,18 @@ class ToolExecutor:
         self.scale_factor = 1.0  # Set by main.py for coordinate scaling
         self.backboard_client = None  # Set by main.py
         self.assistant_id = None  # Set by main.py
+        self.screenshot_b64 = None  # Set by main.py for vision-based clicking
+        self.thread_id = None  # Set by main.py for vision model calls
     
     def set_ocr_context(self, ocr_data: str, scale_factor: float):
         """Set current OCR data and scale factor for find_and_click"""
         self.ocr_data = ocr_data
         self.scale_factor = scale_factor
+    
+    def set_vision_context(self, screenshot_b64: str, thread_id: str):
+        """Set screenshot and thread_id for vision-based element location"""
+        self.screenshot_b64 = screenshot_b64
+        self.thread_id = thread_id
     
     def set_backboard_client(self, client, assistant_id: str):
         """Set Backboard client for memory operations"""
@@ -341,7 +348,7 @@ class ToolExecutor:
             elif tool_name == "navigate_url":
                 return self.navigate_url(**arguments)
             elif tool_name == "find_and_click":
-                return self.find_and_click(**arguments)
+                return await self.find_and_click(**arguments)
             elif tool_name == "create_workflow":
                 return await self.create_workflow(**arguments)
             elif tool_name == "execute_workflow":
@@ -412,25 +419,113 @@ class ToolExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    def find_and_click(self, element_text: str, click_type: str = "single") -> Dict[str, Any]:
-        """Find UI element by text and click it"""
+    async def find_and_click(self, element_text: str, click_type: str = "single") -> Dict[str, Any]:
+        """Find UI element by text and click it (with vision fallback)"""
         try:
-            if not self.ocr_data:
-                return {"success": False, "error": "No OCR data available"}
+            # STEP 1: Try OCR text matching (fast)
+            if self.ocr_data:
+                lines = self.ocr_data.split('\n')
+                for line in lines:
+                    if element_text.lower() in line.lower():
+                        # Extract coordinates
+                        import re
+                        match = re.search(r'\((\d+),\s*(\d+)\)', line)
+                        if match:
+                            x = int(match.group(1))
+                            y = int(match.group(2))
+
+                            # Scale coordinates to actual screen resolution
+                            scaled_x = int(x * self.scale_factor)
+                            scaled_y = int(y * self.scale_factor)
+
+                            # Move and click
+                            pyautogui.moveTo(scaled_x, scaled_y, duration=0.3)
+
+                            if click_type == "double":
+                                pyautogui.click(clicks=2)
+                            elif click_type == "right":
+                                pyautogui.rightClick()
+                            else:
+                                pyautogui.click()
+
+                            time.sleep(0.5)
+
+                            return {
+                                "success": True,
+                                "element": element_text,
+                                "method": "ocr",
+                                "coordinates": (scaled_x, scaled_y),
+                                "message": f"Clicked '{element_text}' at ({scaled_x}, {scaled_y}) via OCR"
+                            }
             
-            # Parse OCR data to find element
-            # Format: "text" at (x, y)
-            lines = self.ocr_data.split('\n')
-            for line in lines:
-                if element_text.lower() in line.lower():
-                    # Extract coordinates
-                    import re
-                    match = re.search(r'\((\d+),\s*(\d+)\)', line)
-                    if match:
-                        x = int(match.group(1))
-                        y = int(match.group(2))
+            # STEP 2: OCR failed - try vision-based location
+            print(f"[Vision Fallback] OCR couldn't find '{element_text}', using vision model...")
+            
+            if not self.backboard_client or not self.thread_id or not self.screenshot_b64:
+                return {
+                    "success": False,
+                    "error": f"Could not find '{element_text}' on screen (vision unavailable)"
+                }
+            
+            # Ask vision model to locate the element
+            vision_prompt = f"""Look at the screenshot carefully. Find the "{element_text}" element (button, icon, link, or any clickable UI element).
+
+The screenshot dimensions are 1280x720 pixels.
+
+Return ONLY a JSON object with the coordinates of the CENTER of that element:
+{{"x": <number>, "y": <number>, "found": true}}
+
+If you cannot find "{element_text}", return:
+{{"found": false, "reason": "brief explanation"}}
+
+JSON response:"""
+
+            try:
+                # Save screenshot to temporary file
+                import tempfile
+                import base64
+                
+                with tempfile.NamedTemporaryFile(mode='wb', suffix='.png', delete=False) as temp_file:
+                    temp_file.write(base64.b64decode(self.screenshot_b64))
+                    temp_path = temp_file.name
+                
+                # Create a temporary thread for vision query
+                vision_thread = await self.backboard_client.create_thread(assistant_id=self.assistant_id)
+                
+                # Send vision query with screenshot file
+                vision_response = await self.backboard_client.add_message(
+                    thread_id=str(vision_thread.thread_id),
+                    content=vision_prompt,
+                    files=[temp_path],  # Pass file path
+                    llm_provider="anthropic",  # Claude is best for vision
+                    model_name="claude-sonnet-4-20250514",
+                    memory="off",
+                    stream=False
+                )
+                
+                # Clean up temp file
+                import os
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+                
+                # Parse vision response
+                import json
+                import re
+                
+                vision_result = vision_response.content.strip()
+                
+                # Extract JSON from response
+                json_match = re.search(r'\{[^}]+\}', vision_result)
+                if json_match:
+                    vision_data = json.loads(json_match.group(0))
+                    
+                    if vision_data.get("found") == True:
+                        x = int(vision_data["x"])
+                        y = int(vision_data["y"])
                         
-                        # Scale coordinates to actual screen resolution
+                        # Scale coordinates
                         scaled_x = int(x * self.scale_factor)
                         scaled_y = int(y * self.scale_factor)
                         
@@ -446,17 +541,34 @@ class ToolExecutor:
                         
                         time.sleep(0.5)
                         
+                        print(f"[Vision Fallback] Successfully located and clicked '{element_text}' at ({scaled_x}, {scaled_y})")
+                        
                         return {
                             "success": True,
                             "element": element_text,
+                            "method": "vision",
                             "coordinates": (scaled_x, scaled_y),
-                            "message": f"Clicked '{element_text}' at ({scaled_x}, {scaled_y})"
+                            "message": f"Clicked '{element_text}' at ({scaled_x}, {scaled_y}) via vision"
                         }
+                    else:
+                        reason = vision_data.get("reason", "Element not found")
+                        return {
+                            "success": False,
+                            "error": f"Vision model: {reason}"
+                        }
+                
+            except Exception as vision_error:
+                print(f"[Vision Fallback] Error: {vision_error}")
+                return {
+                    "success": False,
+                    "error": f"Could not find '{element_text}' on screen (vision failed: {str(vision_error)[:100]})"
+                }
             
             return {
                 "success": False,
                 "error": f"Could not find '{element_text}' on screen"
             }
+            
         except Exception as e:
             return {"success": False, "error": str(e)}
     

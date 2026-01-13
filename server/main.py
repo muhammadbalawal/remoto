@@ -6,7 +6,6 @@ import base64
 import re
 import secrets
 import json
-import asyncio
 from PIL import Image
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
@@ -85,6 +84,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Map frontend thread_ids to Backboard thread_ids (for persistent memory)
+thread_id_mapping: Dict[str, str] = {}  # frontend_id -> backboard_id
+
 # ============= SERVE STATIC FILES =============
 app.mount("/static", StaticFiles(directory="server/static"), name="static")
 
@@ -110,6 +112,7 @@ async def health_check():
     """Health check endpoint for monitoring"""
     return {"status": "healthy", "service": "remote-ai-backend"}
 
+# ============= SSE ENDPOINT =============
 # ============= MODELS =============
 class ChatMessage(BaseModel):
     role: str
@@ -120,12 +123,18 @@ class VoiceRequest(BaseModel):
     thread_id: Optional[str] = None
     history: Optional[List[ChatMessage]] = []  # Kept for backward compatibility
 
+class AnalysisData(BaseModel):
+    model: Optional[str] = None
+    complexity: Optional[str] = None
+    tool_calls: Optional[List[dict]] = []
+
 class VoiceResponse(BaseModel):
     assistant_message: str
     assistant_audio_base64: Optional[str] = None
     screenshot_base64: str
     thread_id: str
     success: bool
+    analysis: Optional[AnalysisData] = None
 
 # ============= SYSTEM PROMPT =============
 SYSTEM_PROMPT = """You are Remoto AI - a voice-controlled computer assistant. The user is remotely controlling their computer via voice commands on their phone.
@@ -151,7 +160,7 @@ Basic Actions:
 Application Control:
 - launch_app: Open Windows applications
 - navigate_url: Open URLs in browser
-- find_and_click: Find text on screen and click it
+- find_and_click: Find text/visual elements and click (OCR + vision fallback)
 
 Workflows & Memory:
 - create_workflow/execute_workflow: Save and replay multi-step sequences
@@ -162,15 +171,42 @@ YOU MUST USE TOOLS FOR ALL ACTIONS
 - NEVER just describe what should happen - EXECUTE IT with tools
 - When user says "open X" → CALL launch_app tool immediately
 - When user says "type Y" → CALL type_text tool immediately
-- When user says "click Z" → CALL find_and_click or click_position tool immediately
-- Combine multiple tool calls for complex sequences
-- When a tool returns success=True, TRUST IT - the action succeeded
+- When user says "click Z" → CALL find_and_click first, if returns success=False then CALL click_position with OCR coordinates
+- Combine multiple tool calls for complex sequences (including retries!)
+- When a tool returns success=False → Try alternative approach, don't give up
+- When a tool returns success=True → TRUST IT - the action succeeded
 - Only provide voice confirmation after tool execution
 
 OCR & COORDINATES:
 - You receive OCR text with positions from screenshot (1280x720)
 - Use OCR coordinates with click_position tool - system auto-scales to actual resolution
-- Example: OCR shows "Submit" at (850, 600) → call click_position(x=850, y=600)
+- Example: OCR shows "Submit" at (850, 600) ? call click_position(x=850, y=600)
+
+CLICKING STRATEGY (CRITICAL - for ANY element):
+When user asks to click something:
+1. ALWAYS use find_and_click("element name") first
+   - This tool now has DUAL capability:
+     a) First tries OCR text matching (fast, for text-based elements)
+     b) If OCR fails → Automatically uses vision model to locate element visually
+   - Works for: text buttons, icon buttons, images, any visible element
+   - The tool handles the fallback automatically - you just call it once!
+
+2. Example usage:
+   User: "click send button"
+   → Call find_and_click("send")
+   → Tool tries OCR first, if fails, vision locates it automatically
+   → Success!
+   
+3. For elements not found by name:
+   - If find_and_click fails for a named element
+   - Look at OCR data and use click_position(x, y) with specific coordinates
+   - Or describe the element's position: "click the blue button in bottom right"
+
+4. Vision model can find:
+   - Icon buttons (no text)
+   - Styled text OCR can't read
+   - Images, logos, graphics
+   - Any visible clickable element
 
 QUICK PATTERNS:
 - Open app: Use launch_app tool
@@ -342,24 +378,49 @@ JSON response:"""
             "recommended_model": ("google", "gemini-2.5-flash-lite")
         }
 
-async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, str]:
+async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, dict]:
     """
     Ask Backboard AI to execute a voice instruction with OCR data
-    Returns: (voice_response, code_to_execute, full_response, thread_id)
+    Returns: (voice_response, full_response, thread_id, analysis_data)
     """
-    global backboard_client, assistant, tool_executor
+    global backboard_client, assistant, tool_executor, thread_id_mapping
     
     # Build the context text
     context_text = f"[Current screenshot attached]\n\nDetected text on screen:\n{ocr_text}\n\nCurrent user request: \"{user_message}\""
     
-    # Create thread if needed
-    if not thread_id:
+    # Handle thread_id mapping (frontend UUID → Backboard UUID)
+    frontend_thread_id = thread_id  # Keep original for SSE events
+    backboard_thread_id = None
+    
+    if not frontend_thread_id:
+        # No thread_id provided, create new one
         thread = await backboard_client.create_thread(assistant_id=assistant.assistant_id)
-        thread_id = str(thread.thread_id)  # Convert UUID to string
+        backboard_thread_id = str(thread.thread_id)
+        frontend_thread_id = backboard_thread_id  # Use same ID for both
+        thread_id_mapping[frontend_thread_id] = backboard_thread_id
+    else:
+        # Frontend thread_id provided - check if we have a Backboard mapping
+        if frontend_thread_id in thread_id_mapping:
+            # We've seen this thread before, use existing Backboard thread
+            backboard_thread_id = thread_id_mapping[frontend_thread_id]
+            print(f"Using existing Backboard thread: {backboard_thread_id} for frontend ID: {frontend_thread_id}")
+        else:
+            # First time seeing this frontend thread_id, create new Backboard thread
+            thread = await backboard_client.create_thread(assistant_id=assistant.assistant_id)
+            backboard_thread_id = str(thread.thread_id)
+            thread_id_mapping[frontend_thread_id] = backboard_thread_id
+            print(f"Created new Backboard thread: {backboard_thread_id} for frontend ID: {frontend_thread_id}")
+    
+    # Use frontend_thread_id for SSE events (what frontend is listening to)
+    # Use backboard_thread_id for Backboard API calls
+    thread_id = frontend_thread_id  # Return value for response
     
     # Set OCR context for tools
     tool_executor.set_ocr_context(ocr_text, scale_factor)
     
+    # Set vision context for fallback element location
+    tool_executor.set_vision_context(screenshot_b64, backboard_thread_id)
+
     # Classify task complexity and select appropriate model
     classification = await classify_task_complexity(user_message, backboard_client, assistant)
     llm_provider, model_name = classification["recommended_model"]
@@ -373,9 +434,9 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     print(f"Selected Model: {llm_provider}/{model_name}")
     print(f"{'='*60}\n")
     
-    # Send message to Backboard with dynamically selected model
+    # Send message to Backboard with dynamically selected model (use Backboard thread ID)
     response = await backboard_client.add_message(
-        thread_id=thread_id,
+        thread_id=backboard_thread_id,
         content=context_text,
         llm_provider=llm_provider,
         model_name=model_name,
@@ -387,6 +448,7 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     max_iterations = 10  # Safety limit to prevent infinite loops
     iteration = 0
     all_tool_results = []  # Track all tool executions
+    full_response = ""  # Initialize to avoid UnboundLocalError
     
     while response.status == 'REQUIRES_ACTION' and response.tool_calls and iteration < max_iterations:
         iteration += 1
@@ -452,18 +514,18 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
         # Submit tool outputs back to Backboard (with error handling)
         try:
             response = await backboard_client.submit_tool_outputs(
-                thread_id=thread_id,
+                thread_id=backboard_thread_id,
                 run_id=response.run_id,
                 tool_outputs=tool_outputs
             )
             
             # Check if the response requires more actions (loop will continue)
             if response.status != 'REQUIRES_ACTION':
-                # Extract final response
-                if hasattr(response, 'latest_message') and response.latest_message:
-                    full_response = response.latest_message.content or ""
-                elif hasattr(response, 'content'):
+                # Extract final response (content is the actual AI response)
+                if hasattr(response, 'content') and response.content:
                     full_response = response.content or ""
+                elif hasattr(response, 'latest_message') and response.latest_message:
+                    full_response = response.latest_message.content or ""
                 else:
                     full_response = ""
                 break
@@ -478,9 +540,17 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     if iteration >= max_iterations:
         print(f"WARNING: Reached max tool execution iterations ({max_iterations})")
         full_response = f"<voice>I completed {len(all_tool_results)} actions but had to stop</voice>"
-    elif not response.tool_calls:
-        # No tool calls, extract normal response
-        full_response = response.latest_message.content if hasattr(response, 'latest_message') else str(response)
+    elif not full_response:
+        # No tool calls needed or loop didn't set response, extract normal response
+        # Priority: content > latest_message > message (message is usually just "Message added successfully")
+        if hasattr(response, 'content') and response.content:
+            full_response = response.content or ""
+        elif hasattr(response, 'latest_message') and response.latest_message:
+            full_response = response.latest_message.content or ""
+        elif hasattr(response, 'message') and response.message:
+            full_response = response.message or ""
+        else:
+            full_response = str(response)
     
     # If still no response, create one based on tool results
     if not full_response or full_response == "None":
@@ -501,7 +571,14 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     voice_response = voice_match.group(1).strip() if voice_match else full_response
     voice_response = re.sub(r'<[^>]+>', '', voice_response).strip()
     
-    return voice_response, full_response, thread_id
+    # Build analysis data
+    analysis_data = {
+        "model": f"{llm_provider}/{model_name}",
+        "complexity": classification['complexity'],
+        "tool_calls": all_tool_results
+    }
+    
+    return voice_response, full_response, thread_id, analysis_data
 @app.post("/voice", response_model=VoiceResponse)
 async def voice_command(request: VoiceRequest):
     """
@@ -515,10 +592,11 @@ async def voice_command(request: VoiceRequest):
     print("Capturing screenshot and running OCR...")
     screenshot_b64, ocr_text, scale_factor = get_screenshot_with_ocr()
     print(f"OCR detected {len(ocr_text.split(chr(10)))} text elements")
-    print(f"Scale factor: {scale_factor:.2f}x (resized -> actual screen)\n")
+    print(f"Scale factor: {scale_factor:.2f}x (resized -> actual screen)")
+    print(f"\nOCR Text Preview (first 500 chars):\n{ocr_text[:500]}\n")
     
     try:
-        voice_response, full_response, thread_id = await ask_backboard_voice(
+        voice_response, full_response, thread_id, analysis_data = await ask_backboard_voice(
             request.text,
             screenshot_b64,
             ocr_text,
@@ -548,7 +626,8 @@ async def voice_command(request: VoiceRequest):
             assistant_audio_base64=audio_base64,
             screenshot_base64=new_screenshot_b64,
             thread_id=str(thread_id),  # Convert UUID to string
-            success=True
+            success=True,
+            analysis=AnalysisData(**analysis_data)
         )
         
     except Exception as e:

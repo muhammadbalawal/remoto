@@ -8,8 +8,30 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/annyang/2.6.1/annyang.min.js"></script>
     </head>
     <body>
-        <div class="container">
-            <div class="content">
+        <div class="main-container">
+            <!-- Left: Analysis Panel -->
+            <div class="analysis-panel">
+                <h2 class="panel-title">Analysis</h2>
+                <div class="analysis-content">
+                    <div class="analysis-section">
+                        <h3 class="section-label">Model Selection</h3>
+                        <div id="modelInfo" class="info-display"></div>
+                    </div>
+
+                    <div class="analysis-section">
+                        <h3 class="section-label">Task Complexity</h3>
+                        <div id="complexityInfo" class="info-display"></div>
+                    </div>
+
+                    <div class="analysis-section">
+                        <h3 class="section-label">Tool Calls</h3>
+                        <div id="toolCalls" class="tool-calls-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center: Video -->
+            <div class="center-panel">
                 <div class="video-container">
                     <iframe 
                         id="stream" 
@@ -46,12 +68,20 @@
 
                 <div id="error" class="error"></div>
             </div>
+
+            <!-- Right: Chat History -->
+            <div class="chat-panel">
+                <h2 class="panel-title">Chat History</h2>
+                <div id="chatHistory" class="chat-history">
+                    <div class="empty-state">Start a conversation...</div>
+                </div>
+            </div>
         </div>
 
         <div id="commandNotification" class="command-notification">
             <div class="spinner"></div>
             <div>
-                <div class="command-label">Running</div>
+                <div class="command-label">Processing</div>
                 <div class="command-text" id="commandText"></div>
             </div>
         </div>
