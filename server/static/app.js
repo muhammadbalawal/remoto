@@ -2,6 +2,7 @@ let isListening = false;
 let conversationHistory = [];
 let sessionPassword = null;
 let currentTranscript = '';
+let threadId = localStorage.getItem('remoto_thread_id') || null;
 
 const voiceBtn = document.getElementById("voiceBtn");
 const textInput = document.getElementById("textInput");
@@ -133,7 +134,8 @@ async function sendCommand(text) {
             },
             body: JSON.stringify({
                 text: text,
-                history: conversationHistory,
+                thread_id: threadId,
+                history: conversationHistory,  // Kept for backward compatibility
             }),
         });
 
@@ -142,6 +144,13 @@ async function sendCommand(text) {
         }
 
         const result = await response.json();
+        
+        // Store thread ID for persistent memory
+        if (result.thread_id) {
+            threadId = result.thread_id;
+            localStorage.setItem('remoto_thread_id', threadId);
+            console.log("Thread ID:", threadId);
+        }
         
         conversationHistory.push({
             role: "user",

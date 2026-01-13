@@ -5,6 +5,8 @@ import time
 import base64
 import re
 import secrets
+import json
+import asyncio
 from PIL import Image
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
@@ -13,9 +15,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import anthropic
 import uvicorn
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 import tempfile
 from gtts import gTTS
 import pytesseract
@@ -24,6 +25,8 @@ import numpy as np
 import sys
 import shutil
 from pathlib import Path
+from backboard import BackboardClient
+from server.tools import TOOL_DEFINITIONS, ToolExecutor
 
 load_dotenv()
 
@@ -66,8 +69,13 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return True
 
+# ============= BACKBOARD INITIALIZATION =============
+backboard_client = None
+assistant = None
+tool_executor = ToolExecutor()
+
 # ============= FASTAPI APP =============
-app = FastAPI(title="Remote AI Backend")
+app = FastAPI(title="Remoto AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,233 +117,76 @@ class ChatMessage(BaseModel):
 
 class VoiceRequest(BaseModel):
     text: str
-    history: Optional[List[ChatMessage]] = []
+    thread_id: Optional[str] = None
+    history: Optional[List[ChatMessage]] = []  # Kept for backward compatibility
 
 class VoiceResponse(BaseModel):
     assistant_message: str
     assistant_audio_base64: Optional[str] = None
-    code_executed: Optional[str] = None
-    execution_result: str
     screenshot_base64: str
+    thread_id: str
     success: bool
 
 # ============= SYSTEM PROMPT =============
-SYSTEM_PROMPT = """You are a voice-controlled computer assistant. The user is remotely accessing their computer via voice commands on their phone.
+SYSTEM_PROMPT = """You are Remoto AI - a voice-controlled computer assistant. The user is remotely controlling their computer via voice commands on their phone.
 
-Your job: Execute EXACTLY what the user asks. You can combine multiple RELATED steps into one response, but don't do unrelated tasks together.
+CORE BEHAVIOR:
+- Execute exactly what the user asks
+- Be conversational and concise (they're listening, not reading)
+- Keep voice responses to 1-2 sentences maximum
+- Use conversation history to understand context ("it", "that file", etc.)
+- Make smart assumptions rather than asking for clarification
+- Combine related steps, but not unrelated tasks
 
-CONVERSATION AWARENESS:
-- You have access to recent conversation history
-- Use context from previous exchanges to understand references like "it", "that file", "the same folder"
-- If user provides information in response to your question, USE IT immediately
-- Don't ask for information you already have from conversation history
-- If you asked "what should I name the file?" and user says "test.js", just create/save it as test.js
+AVAILABLE TOOLS:
+You have these tools for ALL operations:
 
-AVAILABLE COMMANDS:
+Basic Actions:
+- type_text: Type text on keyboard
+- press_key: Press single key (enter, tab, esc, etc.)
+- press_hotkey: Press key combos (ctrl+c, alt+tab, etc.)
+- click_position: Click at coordinates from OCR
+- scroll_page: Scroll up (positive) or down (negative)
 
-KEYBOARD:
-pyautogui.press('key') - Press a single key
-pyautogui.hotkey('key1', 'key2', ...) - Press multiple keys together  
-pyautogui.write('text', interval=0.05) - Type text (use for all text input)
-time.sleep(seconds) - Wait (use 0.5-2.0 seconds between actions)
+Application Control:
+- launch_app: Open Windows applications
+- navigate_url: Open URLs in browser
+- find_and_click: Find text on screen and click it
 
-MOUSE:
-pyautogui.click(x, y) - Click at coordinates (x, y)
-pyautogui.click(x, y, clicks=2) - Double click at coordinates
-pyautogui.rightClick(x, y) - Right click at coordinates
-pyautogui.moveTo(x, y, duration=0.5) - Move mouse smoothly to position (with tweening)
-pyautogui.dragTo(x, y, duration=0.5) - Drag to position
-pyautogui.scroll(clicks) - Scroll up (positive) or down (negative)
+Workflows & Memory:
+- create_workflow/execute_workflow: Save and replay multi-step sequences
+- save_learned_shortcut: Remember new shortcuts user teaches you
 
-TEXT DETECTION:
-You will receive OCR text extracted from the screenshot showing:
-- Detected text and their approximate positions
-- Use this to find buttons, links, menu items, etc.
-- Combine OCR positions with click commands
+CRITICAL TOOL USAGE RULES:
+YOU MUST USE TOOLS FOR ALL ACTIONS
+- NEVER just describe what should happen - EXECUTE IT with tools
+- When user says "open X" → CALL launch_app tool immediately
+- When user says "type Y" → CALL type_text tool immediately
+- When user says "click Z" → CALL find_and_click or click_position tool immediately
+- Combine multiple tool calls for complex sequences
+- When a tool returns success=True, TRUST IT - the action succeeded
+- Only provide voice confirmation after tool execution
 
-CRITICAL COORDINATE INFORMATION:
-- The screenshot you see is 1280x720 resolution
-- OCR coordinates are provided in this 1280x720 space
-- The system will automatically scale your coordinates to the actual screen resolution
-- Just use the coordinates from the OCR data directly - no scaling needed on your end
-- Example: If OCR shows "Compose" at (79, 183), use pyautogui.click(79, 183)
+OCR & COORDINATES:
+- You receive OCR text with positions from screenshot (1280x720)
+- Use OCR coordinates with click_position tool - system auto-scales to actual resolution
+- Example: OCR shows "Submit" at (850, 600) → call click_position(x=850, y=600)
 
-MULTI-STEP EXECUTION RULES:
-✅ COMBINE these related actions:
-- Opening app + navigating to URL (e.g., "open chrome and go to gmail.com")
-- Opening app + opening file (e.g., "open vscode and open homework folder")
-- Clicking + typing (e.g., "click search bar and type hello")
-- Navigation sequences (e.g., "go to desktop and open homework folder")
-- Saving files - DON'T ask for filename, use a default like "document.txt" or infer from context
-
-❌ DON'T combine unrelated actions:
-- Different applications (e.g., don't open Chrome AND VSCode together)
-- Actions requiring user verification (e.g., don't send email without confirmation)
-- Complex multi-stage workflows across different contexts
-
-❌ NEVER ASK FOR:
-- Filenames (use defaults: "document.txt", "file.js", "note.md", etc.)
-- Confirmation for simple actions (clicking, typing, opening apps)
-- Information you already have from conversation history
-
-OPENING APPLICATIONS (Windows Search - PREFERRED):
-pyautogui.press('win'); time.sleep(0.5); pyautogui.write('app_name', interval=0.05); time.sleep(0.3); pyautogui.press('enter'); time.sleep(2)
-
-Common apps: vscode, notepad, chrome, firefox, edge, powershell, git bash, cmd, file explorer (write 'explorer')
-
-BROWSER WORKFLOW:
-To open browser and navigate:
-pyautogui.press('win'); time.sleep(0.5); pyautogui.write('chrome', interval=0.05); time.sleep(0.3); pyautogui.press('enter'); time.sleep(2.5); pyautogui.hotkey('ctrl', 'l'); time.sleep(0.3); pyautogui.write('gmail.com', interval=0.05); pyautogui.press('enter'); time.sleep(2)
-
-SAVING FILES:
-When user asks to save:
-1. Check if they mentioned a filename - use it
-2. If not, use a sensible default based on context
-3. Press Ctrl+S, wait, type filename, press Enter
-Example: pyautogui.hotkey('ctrl', 's'); time.sleep(0.5); pyautogui.write('document.txt', interval=0.05); pyautogui.press('enter')
-
-NAVIGATING FILE EXPLORER:
-- Open: pyautogui.hotkey('win', 'e'); time.sleep(1)
-- Type path in address bar: pyautogui.hotkey('alt', 'd'); time.sleep(0.3); pyautogui.write('path', interval=0.05); pyautogui.press('enter')
-- Desktop: pyautogui.hotkey('alt', 'd'); pyautogui.write('Desktop', interval=0.05); pyautogui.press('enter')
-
-COMMON SHORTCUTS:
-- Copy: Ctrl+C
-- Paste: Ctrl+V
-- Save: Ctrl+S
-- Select all: Ctrl+A
-- Find: Ctrl+F
-- Close tab: Ctrl+W
-- Close window: Alt+F4
-- Switch apps: Alt+Tab
-- Show desktop: Win+D
-- Address bar (browser): Ctrl+L
-- New tab (browser): Ctrl+T
-
-CLICKING STRATEGY:
-1. Look for the text/button in the OCR results
-2. Use the position (x, y) to click it
-3. If OCR doesn't detect it, use keyboard shortcuts as fallback
-4. Use moveTo with duration for smooth, visible mouse movement
-5. Always wait (time.sleep) after clicks for UI to respond
-
-VOICE INTERACTION RULES:
-1. Be conversational and natural - this is VOICE, not text chat
-2. Keep responses SHORT (1-2 sentences max) - user is listening, not reading
-3. Confirm actions: "Opening Chrome and going to Gmail" or "Saving as document.txt"
-4. If you see an error or something unexpected, briefly explain: "I don't see that button"
-5. RARELY ask for clarification - use context and make reasonable assumptions
-6. You can execute multiple related steps without asking - be efficient
-7. After action, briefly describe result: "Done" or "Gmail is loading"
-8. Be helpful but concise - remember they're on their phone
-9. If you just asked a question and user answered it, ACT on that answer immediately
+QUICK PATTERNS:
+- Open app: Use launch_app tool
+- Type text: Use type_text tool
+- Press keys: Use press_key or press_hotkey tools
+- Click: Use find_and_click or click_position tools
 
 RESPONSE FORMAT:
-You MUST respond with BOTH parts:
-1. <voice> tag: What you'll say to the user (keep it SHORT)
-2. <code> tag: Python code to execute (can be multiple lines for related actions)
+Only use <voice> tags for spoken confirmation:
+<voice>Brief spoken confirmation of what you did</voice>
 
-Format:
-<voice>Your brief spoken response</voice>
-<code>
-pyautogui.click(500, 300)
-time.sleep(0.5)
-pyautogui.write('hello', interval=0.05)
-</code>
-
-If no action needed (just clarifying/responding), only use <voice> tag.
-
-Examples:
-
-User: "Open Chrome and go to Gmail"
-<voice>Opening Chrome and going to Gmail</voice>
-<code>
-pyautogui.press('win')
-time.sleep(0.5)
-pyautogui.write('chrome', interval=0.05)
-time.sleep(0.3)
-pyautogui.press('enter')
-time.sleep(2.5)
-pyautogui.hotkey('ctrl', 'l')
-time.sleep(0.3)
-pyautogui.write('gmail.com', interval=0.05)
-pyautogui.press('enter')
-time.sleep(2)
-</code>
-
-User: "Save this file"
-<voice>Saving as document.txt</voice>
-<code>
-pyautogui.hotkey('ctrl', 's')
-time.sleep(0.5)
-pyautogui.write('document.txt', interval=0.05)
-pyautogui.press('enter')
-time.sleep(0.5)
-</code>
-
-User (after being asked): "test.js"
-<voice>Saving as test.js</voice>
-<code>
-pyautogui.write('test.js', interval=0.05)
-pyautogui.press('enter')
-time.sleep(0.5)
-</code>
-
-User: "Click the submit button"
-<voice>Clicking submit</voice>
-<code>
-pyautogui.moveTo(850, 600, duration=0.3)
-pyautogui.click()
-time.sleep(0.5)
-</code>
-
-User: "Open notepad and type hello world"
-<voice>Opening Notepad and typing hello world</voice>
-<code>
-pyautogui.press('win')
-time.sleep(0.5)
-pyautogui.write('notepad', interval=0.05)
-time.sleep(0.3)
-pyautogui.press('enter')
-time.sleep(2)
-pyautogui.write('hello world', interval=0.05)
-time.sleep(0.3)
-</code>
-
-User: "Scroll down"
-<voice>Scrolling down</voice>
-<code>
-pyautogui.scroll(-3)
-time.sleep(0.3)
-</code>
-
-User: "Search for python tutorials on Google"
-<voice>Searching Google for python tutorials</voice>
-<code>
-pyautogui.press('win')
-time.sleep(0.5)
-pyautogui.write('chrome', interval=0.05)
-time.sleep(0.3)
-pyautogui.press('enter')
-time.sleep(2.5)
-pyautogui.hotkey('ctrl', 'l')
-time.sleep(0.3)
-pyautogui.write('google.com', interval=0.05)
-pyautogui.press('enter')
-time.sleep(2)
-pyautogui.write('python tutorials', interval=0.05)
-pyautogui.press('enter')
-time.sleep(1.5)
-</code>
-
-Remember: 
-- Use conversation history to understand context
-- Don't ask unnecessary questions
-- Combine RELATED steps for efficiency
-- Keep voice responses BRIEF and NATURAL
-- Use appropriate wait times between actions (longer for apps to load)
-- User is on their phone listening, so be concise
-- Make reasonable assumptions rather than asking for clarification"""
+REMEMBER:
+- User is on phone listening - be BRIEF
+- Don't ask for filenames - use sensible defaults
+- MUST execute actions using tools, not describe them
+- Combine related tool calls for efficiency"""
 
 def get_screenshot_with_ocr() -> Tuple[str, str, float]:
     """
@@ -411,117 +262,254 @@ def text_to_speech(text: str) -> Optional[str]:
         print(f"TTS error: {e}")
         return None
 
-def ask_claude_voice(user_message: str, screenshot_b64: str, ocr_text: str, conversation_history: Optional[List[ChatMessage]] = None) -> tuple[str, str, str]:
+async def classify_task_complexity(user_message: str, backboard_client, assistant) -> dict:
     """
-    Ask Claude to execute a voice instruction with OCR data
-    Returns: (voice_response, code_to_execute, full_response)
+    Use a fast LLM to analyze task complexity and recommend appropriate model.
+    Pure LLM analysis - no keyword matching!
+    
+    Returns: {
+        "complexity": "simple|medium|complex",
+        "reasoning": "why this classification",
+        "recommended_model": ("provider", "model_name")
+    }
     """
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    classification_prompt = f"""Analyze the following user request and classify its complexity for a voice-controlled computer assistant.
+
+User Request: "{user_message}"
+
+Evaluate based on:
+1. Number of steps required (1 step = simple, 2-3 = medium, 4+ = complex)
+2. Reasoning depth needed (basic action vs planning/problem-solving)
+3. Tool/API calls required (single action vs coordinated sequence)
+4. Error handling complexity (straightforward vs requires judgment)
+
+Classify as:
+- "simple": Single straightforward action (open app, click button, type text)
+- "medium": 2-3 coordinated actions or simple navigation sequences
+- "complex": Multi-step workflows, planning required, or complex reasoning
+
+Respond ONLY with valid JSON in this exact format:
+{{"complexity": "simple", "reasoning": "Single action to launch application", "steps": 1}}
+
+JSON response:"""
+
+    try:
+        # Create temporary thread for classification
+        temp_thread = await backboard_client.create_thread(assistant_id=assistant.assistant_id)
+        
+        # Use cheap/fast model for classification
+        response = await backboard_client.add_message(
+            thread_id=str(temp_thread.thread_id),
+            content=classification_prompt,
+            llm_provider="google",
+            model_name="gemini-2.5-flash-lite",
+            memory="off",
+            stream=False
+        )
+        
+        # Parse JSON response - extract JSON from response
+        import json
+        import re
+        
+        content = response.content.strip()
+        
+        # Try to extract JSON if wrapped in text
+        json_match = re.search(r'\{[^}]+\}', content)
+        if json_match:
+            content = json_match.group(0)
+        
+        classification = json.loads(content)
+        
+        # Map complexity to model (using models from Backboard catalog)
+        model_map = {
+            "simple": ("google", "gemini-2.5-flash-lite"),      # Fastest & cheapest
+            "medium": ("openai", "gpt-4.1"),                     # Balanced
+            "complex": ("anthropic", "claude-sonnet-4-20250514") # Most powerful
+        }
+        
+        complexity = classification.get("complexity", "medium")
+        classification["recommended_model"] = model_map.get(complexity, ("openai", "gpt-4o"))
+        
+        return classification
+        
+    except Exception as e:
+        print(f"Classification error: {e}")
+        print(f"Response was: {response.content if 'response' in locals() else 'No response'}")
+        # Default to simple for basic commands
+        return {
+            "complexity": "simple",
+            "reasoning": "Classification failed, defaulting to simple model",
+            "recommended_model": ("google", "gemini-2.5-flash-lite")
+        }
+
+async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, str]:
+    """
+    Ask Backboard AI to execute a voice instruction with OCR data
+    Returns: (voice_response, code_to_execute, full_response, thread_id)
+    """
+    global backboard_client, assistant, tool_executor
     
-    messages = []
+    # Build the context text
+    context_text = f"[Current screenshot attached]\n\nDetected text on screen:\n{ocr_text}\n\nCurrent user request: \"{user_message}\""
     
-    # Build conversation context string for better awareness
-    conversation_context = ""
-    if conversation_history and len(conversation_history) > 0:
-        conversation_context = "\n\nRECENT CONVERSATION:\n"
-        # Show last 6 messages for context
-        recent = conversation_history[-6:]
-        for msg in recent:
-            role_label = "User" if msg.role == "user" else "You"
-            conversation_context += f"{role_label}: {msg.content}\n"
-        conversation_context += "\n"
+    # Create thread if needed
+    if not thread_id:
+        thread = await backboard_client.create_thread(assistant_id=assistant.assistant_id)
+        thread_id = str(thread.thread_id)  # Convert UUID to string
     
-    # Add conversation history as actual messages
-    if conversation_history:
-        for msg in conversation_history[-10:]:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
+    # Set OCR context for tools
+    tool_executor.set_ocr_context(ocr_text, scale_factor)
     
-    # Build the context text with conversation awareness
-    context_text = f"[Current screenshot attached]\n\nDetected text on screen:\n{ocr_text}{conversation_context}Current user request: \"{user_message}\""
+    # Classify task complexity and select appropriate model
+    classification = await classify_task_complexity(user_message, backboard_client, assistant)
+    llm_provider, model_name = classification["recommended_model"]
     
-    messages.append({
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": screenshot_b64,
-                },
-            },
-            {
-                "type": "text",
-                "text": context_text
-            }
-        ],
-    })
+    # Log classification for visibility
+    print(f"\n{'='*60}")
+    print(f"TASK CLASSIFICATION")
+    print(f"{'='*60}")
+    print(f"Complexity: {classification['complexity'].upper()}")
+    print(f"Reasoning: {classification['reasoning']}")
+    print(f"Selected Model: {llm_provider}/{model_name}")
+    print(f"{'='*60}\n")
     
-    response = client.messages.create(
-        model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514"),
-        max_tokens=1000,
-        temperature=0.0,
-        system=SYSTEM_PROMPT,
-        messages=messages
+    # Send message to Backboard with dynamically selected model
+    response = await backboard_client.add_message(
+        thread_id=thread_id,
+        content=context_text,
+        llm_provider=llm_provider,
+        model_name=model_name,
+        memory="Auto",  # Enable RAG search and automatic memory context
+        stream=False
     )
     
-    full_response = response.content[0].text
+    # Loop until no more tool calls (multi-step execution)
+    max_iterations = 10  # Safety limit to prevent infinite loops
+    iteration = 0
+    all_tool_results = []  # Track all tool executions
     
+    while response.status == 'REQUIRES_ACTION' and response.tool_calls and iteration < max_iterations:
+        iteration += 1
+        if iteration > 1:
+            print(f"\n--- Tool Execution Step {iteration} ---")
+        
+        tool_outputs = []
+        
+        for tool_call in response.tool_calls:
+            # Handle both object and dict formats (Backboard SDK may return either)
+            try:
+                if isinstance(tool_call, dict):
+                    # Dict format (typically from submit_tool_outputs)
+                    tool_call_id = tool_call['id']
+                    function_name = tool_call['function']['name']
+                    function_args = tool_call['function'].get('parsed_arguments') or tool_call['function'].get('arguments', {})
+                    
+                    # Parse if string
+                    if isinstance(function_args, str):
+                        try:
+                            function_args = json.loads(function_args)
+                        except json.JSONDecodeError:
+                            print(f"Error parsing arguments: {function_args}")
+                            function_args = {}
+                else:
+                    # Object format (typically from add_message)
+                    tool_call_id = tool_call.id
+                    function_name = tool_call.function.name
+                    
+                    # Try parsed_arguments first (auto-parsed by SDK)
+                    function_args = getattr(tool_call.function, 'parsed_arguments', None)
+                    
+                    # Fallback: manually parse JSON string if needed
+                    if function_args is None:
+                        arguments_str = getattr(tool_call.function, 'arguments', '{}')
+                        try:
+                            function_args = json.loads(arguments_str) if isinstance(arguments_str, str) else arguments_str
+                        except json.JSONDecodeError:
+                            print(f"Error parsing arguments: {arguments_str}")
+                            function_args = {}
+            except Exception as e:
+                print(f"ERROR parsing tool call: {e}")
+                print(f"Tool call type: {type(tool_call)}, content: {tool_call}")
+                continue
+            
+            print(f"Executing tool: {function_name} with args: {function_args}")
+            
+            # Execute the tool (now async)
+            result = await tool_executor.execute(function_name, function_args)
+            print(f"Tool result: {result}")
+            
+            all_tool_results.append({
+                "tool": function_name,
+                "args": function_args,
+                "result": result
+            })
+            
+            tool_outputs.append({
+                "tool_call_id": tool_call_id,
+                "output": json.dumps(result)
+            })
+        
+        # Submit tool outputs back to Backboard (with error handling)
+        try:
+            response = await backboard_client.submit_tool_outputs(
+                thread_id=thread_id,
+                run_id=response.run_id,
+                tool_outputs=tool_outputs
+            )
+            
+            # Check if the response requires more actions (loop will continue)
+            if response.status != 'REQUIRES_ACTION':
+                # Extract final response
+                if hasattr(response, 'latest_message') and response.latest_message:
+                    full_response = response.latest_message.content or ""
+                elif hasattr(response, 'content'):
+                    full_response = response.content or ""
+                else:
+                    full_response = ""
+                break
+                
+        except Exception as e:
+            print(f"Warning: submit_tool_outputs failed: {e}")
+            print("Generating fallback response from tool results...")
+            full_response = ""
+            break
+    
+    # If we exited the loop without a response, generate one
+    if iteration >= max_iterations:
+        print(f"WARNING: Reached max tool execution iterations ({max_iterations})")
+        full_response = f"<voice>I completed {len(all_tool_results)} actions but had to stop</voice>"
+    elif not response.tool_calls:
+        # No tool calls, extract normal response
+        full_response = response.latest_message.content if hasattr(response, 'latest_message') else str(response)
+    
+    # If still no response, create one based on tool results
+    if not full_response or full_response == "None":
+        if all_tool_results:
+            successful_count = sum(1 for tr in all_tool_results if tr["result"].get("success"))
+            if successful_count == len(all_tool_results):
+                full_response = f"<voice>Completed {len(all_tool_results)} actions successfully</voice>"
+            else:
+                full_response = f"<voice>Completed {successful_count} out of {len(all_tool_results)} actions</voice>"
+        else:
+            full_response = f"<voice>Done</voice>"
+    
+    if iteration > 0:
+        print(f"Final response after {iteration} tool execution step(s): {full_response[:200]}...")
+    
+    # Parse response for voice
     voice_match = re.search(r'<voice>(.*?)</voice>', full_response, re.DOTALL)
-    code_match = re.search(r'<code>(.*?)</code>', full_response, re.DOTALL)
-    
     voice_response = voice_match.group(1).strip() if voice_match else full_response
-    code = code_match.group(1).strip() if code_match else ""
-    
     voice_response = re.sub(r'<[^>]+>', '', voice_response).strip()
     
-    return voice_response, code, full_response
-
-def parse_and_clean_code(code: str, scale_factor: float = 1.0) -> str:
-    """
-    Clean up code for execution and scale mouse coordinates
-    """
-    code = code.replace("```python", "").replace("```", "").strip()
-    
-    lines = []
-    for line in code.split('\n'):
-        line = line.strip()
-        if line and (
-            'pyautogui' in line or 
-            'time.sleep' in line or 
-            line.startswith('import')
-        ):
-            # Scale mouse coordinates if scale_factor != 1.0
-            if scale_factor != 1.0 and any(fn in line for fn in ['click', 'moveTo', 'dragTo', 'rightClick']):
-                # Extract coordinates and scale them
-                # Match patterns like: pyautogui.click(100, 200)
-                coord_pattern = r'(\d+),\s*(\d+)'
-                match = re.search(coord_pattern, line)
-                if match:
-                    x = int(match.group(1))
-                    y = int(match.group(2))
-                    
-                    # Scale to actual screen coordinates
-                    scaled_x = int(x * scale_factor)
-                    scaled_y = int(y * scale_factor)
-                    
-                    # Replace coordinates in the line
-                    line = re.sub(coord_pattern, f'{scaled_x}, {scaled_y}', line, count=1)
-            
-            lines.append(line)
-    
-    return '\n'.join(lines)
-
+    return voice_response, full_response, thread_id
 @app.post("/voice", response_model=VoiceResponse)
 async def voice_command(request: VoiceRequest):
     """
-    Main voice command endpoint with OCR and mouse support
+    Main voice command endpoint with OCR, custom tools, and Backboard integration
     """
     print("\n" + "=" * 60)
     print(f"USER SAID: {request.text}")
+    print(f"THREAD ID: {request.thread_id or 'NEW'}")
     print("=" * 60 + "\n")
     
     print("Capturing screenshot and running OCR...")
@@ -530,74 +518,113 @@ async def voice_command(request: VoiceRequest):
     print(f"Scale factor: {scale_factor:.2f}x (resized -> actual screen)\n")
     
     try:
-        voice_response, code, full_response = ask_claude_voice(
+        voice_response, full_response, thread_id = await ask_backboard_voice(
             request.text,
             screenshot_b64,
             ocr_text,
-            request.history
+            request.thread_id,
+            scale_factor
         )
         
         print(f"ASSISTANT SAYS: \"{voice_response}\"")
-        if code:
-            print(f"\nCODE TO EXECUTE (before scaling):\n{code}\n")
         
-        execution_result = "No action needed"
-        cleaned_code = None
-        
-        if code:
-            cleaned_code = parse_and_clean_code(code, scale_factor)
-            print(f"EXECUTING CODE (after scaling):\n{cleaned_code}\n")
-            
-            try:
-                exec(cleaned_code)
-                execution_result = "Executed successfully"
-                print(execution_result)
-            except Exception as e:
-                execution_result = f"Execution error: {str(e)}"
-                print(execution_result)
-                voice_response = f"I tried but got an error. {voice_response}"
-        
+        # Generate speech (tools already executed via Backboard)
         print("Generating speech response...")
         audio_base64 = text_to_speech(voice_response)
         
-        if cleaned_code:
-            time.sleep(1.2)
+        # Small delay to let audio start playing on frontend
+        time.sleep(0.8)
+        
+        # Brief pause before taking screenshot to capture any UI changes
+        time.sleep(0.5)
         
         # Get new screenshot after action
         new_screenshot_b64, _, _ = get_screenshot_with_ocr()
         
-        print("Request completed\n")
+        print(f"Request completed. Thread: {thread_id}\n")
         
         return VoiceResponse(
             assistant_message=voice_response,
             assistant_audio_base64=audio_base64,
-            code_executed=cleaned_code,
-            execution_result=execution_result,
             screenshot_base64=new_screenshot_b64,
+            thread_id=str(thread_id),  # Convert UUID to string
             success=True
         )
         
     except Exception as e:
         error_msg = "Sorry, something went wrong on my end"
-        print(f"ERROR: {str(e)}\n")
-        import traceback
-        traceback.print_exc()
+        # Print cleaner error message
+        error_str = str(e)
+        if "502" in error_str or "Bad Gateway" in error_str:
+            print(f"ERROR: Backboard API temporarily unavailable (502 Bad Gateway)\n")
+        else:
+            print(f"ERROR: {error_str[:200]}\n")  # Limit error message length
+        
+        if os.getenv("DEBUG"):  # Only print full traceback in debug mode
+            import traceback
+            traceback.print_exc()
         
         return VoiceResponse(
             assistant_message=error_msg,
             assistant_audio_base64=text_to_speech(error_msg),
-            code_executed=None,
-            execution_result=f"Error: {str(e)}",
             screenshot_base64=screenshot_b64,
+            thread_id=str(request.thread_id) if request.thread_id else "",
             success=False
         )
 
 # ============= STARTUP MESSAGE =============
 @app.on_event("startup")
 async def startup_event():
-    """Display startup information"""
+    """Initialize Backboard and display startup information"""
+    global backboard_client, assistant, tool_executor
+    
     print("\n" + "=" * 60)
-    print("REMOTE AI BACKEND STARTED")
+    print("REMOTO AI BACKEND STARTING...")
+    print("=" * 60)
+    
+    # Initialize Backboard client
+    backboard_api_key = os.getenv("BACKBOARD_API_KEY")
+    if not backboard_api_key:
+        print("WARNING: BACKBOARD_API_KEY not set in environment!")
+        print("Please set BACKBOARD_API_KEY in your .env file")
+    else:
+        try:
+            backboard_client = BackboardClient(api_key=backboard_api_key)
+            print("[OK] Backboard client initialized")
+            
+            # Create assistant with tools
+            assistant = await backboard_client.create_assistant(
+                name="Remoto AI",
+                description=SYSTEM_PROMPT,
+                tools=TOOL_DEFINITIONS
+            )
+            print(f"[OK] Assistant created: {assistant.assistant_id}")
+            
+            # Set Backboard client on tool executor
+            tool_executor.set_backboard_client(backboard_client, assistant.assistant_id)
+            
+            # Upload shortcuts database to RAG
+            shortcuts_path = "server/shortcuts.json"
+            if os.path.exists(shortcuts_path):
+                try:
+                    document = await backboard_client.upload_document_to_assistant(
+                        assistant_id=assistant.assistant_id,
+                        file_path=shortcuts_path
+                    )
+                    print(f"[OK] Shortcuts database uploaded to RAG: {getattr(document, 'id', 'uploaded')}")
+                except Exception as e:
+                    print(f"[WARNING] Could not upload shortcuts to RAG: {e}")
+            
+            # Load workflows from memory
+            await tool_executor.load_workflows_from_memory()
+            print(f"[OK] Tool executor initialized with memory")
+            
+        except Exception as e:
+            print(f"[ERROR] Backboard initialization failed: {e}")
+            print("The app will not work without Backboard integration")
+    
+    print("=" * 60)
+    print("REMOTO AI BACKEND READY")
     print("=" * 60)
     print(f"Session Password: {SESSION_PASSWORD}")
     print(f"API URL: http://localhost:8000")

@@ -1,0 +1,274 @@
+{
+  "shortcuts": [
+    {
+      "app": "Windows",
+      "action": "show desktop",
+      "shortcut": ["Win", "D"],
+      "category": "system"
+    },
+    {
+      "app": "Windows",
+      "action": "file explorer",
+      "shortcut": ["Win", "E"],
+      "category": "system"
+    },
+    {
+      "app": "Windows",
+      "action": "lock computer",
+      "shortcut": ["Win", "L"],
+      "category": "system"
+    },
+    {
+      "app": "Windows",
+      "action": "task manager",
+      "shortcut": ["Ctrl", "Shift", "Esc"],
+      "category": "system"
+    },
+    {
+      "app": "Windows",
+      "action": "screenshot",
+      "shortcut": ["Win", "Shift", "S"],
+      "category": "system"
+    },
+    {
+      "app": "Windows",
+      "action": "settings",
+      "shortcut": ["Win", "I"],
+      "category": "system"
+    },
+    {
+      "app": "Chrome",
+      "action": "new tab",
+      "shortcut": ["Ctrl", "T"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "close tab",
+      "shortcut": ["Ctrl", "W"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "reopen tab",
+      "shortcut": ["Ctrl", "Shift", "T"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "address bar",
+      "shortcut": ["Ctrl", "L"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "refresh",
+      "shortcut": ["F5"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "fullscreen",
+      "shortcut": ["F11"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "history",
+      "shortcut": ["Ctrl", "H"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "downloads",
+      "shortcut": ["Ctrl", "J"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "bookmark",
+      "shortcut": ["Ctrl", "D"],
+      "category": "browser"
+    },
+    {
+      "app": "Chrome",
+      "action": "incognito",
+      "shortcut": ["Ctrl", "Shift", "N"],
+      "category": "browser"
+    },
+    {
+      "app": "VSCode",
+      "action": "quick open",
+      "shortcut": ["Ctrl", "P"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "command palette",
+      "shortcut": ["Ctrl", "Shift", "P"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "terminal",
+      "shortcut": ["Ctrl", "`"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "format document",
+      "shortcut": ["Shift", "Alt", "F"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "find",
+      "shortcut": ["Ctrl", "F"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "replace",
+      "shortcut": ["Ctrl", "H"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "comment",
+      "shortcut": ["Ctrl", "/"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "sidebar",
+      "shortcut": ["Ctrl", "B"],
+      "category": "editor"
+    },
+    {
+      "app": "VSCode",
+      "action": "debug",
+      "shortcut": ["F5"],
+      "category": "editor"
+    },
+    {
+      "app": "Universal",
+      "action": "copy",
+      "shortcut": ["Ctrl", "C"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "paste",
+      "shortcut": ["Ctrl", "V"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "cut",
+      "shortcut": ["Ctrl", "X"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "undo",
+      "shortcut": ["Ctrl", "Z"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "redo",
+      "shortcut": ["Ctrl", "Y"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "select all",
+      "shortcut": ["Ctrl", "A"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "save",
+      "shortcut": ["Ctrl", "S"],
+      "category": "editing"
+    },
+    {
+      "app": "Universal",
+      "action": "find",
+      "shortcut": ["Ctrl", "F"],
+      "category": "editing"
+    },
+    {
+      "app": "Word",
+      "action": "bold",
+      "shortcut": ["Ctrl", "B"],
+      "category": "office"
+    },
+    {
+      "app": "Word",
+      "action": "italic",
+      "shortcut": ["Ctrl", "I"],
+      "category": "office"
+    },
+    {
+      "app": "Word",
+      "action": "underline",
+      "shortcut": ["Ctrl", "U"],
+      "category": "office"
+    },
+    {
+      "app": "Word",
+      "action": "print",
+      "shortcut": ["Ctrl", "P"],
+      "category": "office"
+    },
+    {
+      "app": "Excel",
+      "action": "sum formula",
+      "shortcut": ["Alt", "="],
+      "category": "office"
+    },
+    {
+      "app": "File Explorer",
+      "action": "new folder",
+      "shortcut": ["Ctrl", "Shift", "N"],
+      "category": "files"
+    },
+    {
+      "app": "File Explorer",
+      "action": "rename",
+      "shortcut": ["F2"],
+      "category": "files"
+    },
+    {
+      "app": "File Explorer",
+      "action": "delete",
+      "shortcut": ["Delete"],
+      "category": "files"
+    },
+    {
+      "app": "File Explorer",
+      "action": "address bar",
+      "shortcut": ["Alt", "D"],
+      "category": "files"
+    },
+    {
+      "app": "Notepad",
+      "action": "new",
+      "shortcut": ["Ctrl", "N"],
+      "category": "editor"
+    },
+    {
+      "app": "Notepad",
+      "action": "save",
+      "shortcut": ["Ctrl", "S"],
+      "category": "editor"
+    },
+    {
+      "app": "Notepad",
+      "action": "find",
+      "shortcut": ["Ctrl", "F"],
+      "category": "editor"
+    }
+  ]
+}
