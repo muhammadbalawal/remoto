@@ -11,7 +11,12 @@ from cli.utils.installer import DependencyInstaller
 
 
 class MediaMTXManager:
-    """Manages MediaMTX service"""
+    """Manages the MediaMTX RTSP/HLS media server process.
+
+    MediaMTX receives the desktop RTSP stream from FFmpeg on port 8554
+    and re-publishes it as a low-latency HLS stream on port 8888, which
+    is then tunneled through Cloudflare for remote access.
+    """
     
     def __init__(self, logs_dir: Path, data_dir: Path):
         self.logs_dir = logs_dir
@@ -63,7 +68,11 @@ paths:
 """
     
     def _ensure_config(self):
-        """Ensure mediamtx.yml exists"""
+        """Create the MediaMTX YAML config file if it doesn't already exist.
+
+        Checks the current directory and ``~/.remoto/`` for an existing config.
+        If none is found, writes the default configuration to ``~/.remoto/mediamtx.yml``.
+        """
         # Look for config in common locations
         possible_configs = [
             Path.cwd() / "mediamtx.yml",
@@ -85,7 +94,11 @@ paths:
         Logger.info(f"Created MediaMTX config at {config_path}")
     
     def start(self):
-        """Start MediaMTX"""
+        """Start the MediaMTX server with the generated YAML configuration.
+
+        Ensures the config exists, locates the MediaMTX binary, launches it
+        as a background process, and waits for port 8888 (HLS) to become available.
+        """
         # Check if already running
         if self.is_running():
             Logger.warning("MediaMTX is already running")
@@ -149,7 +162,7 @@ paths:
             time.sleep(1)
     
     def is_running(self) -> bool:
-        """Check if MediaMTX is running"""
+        """Check if MediaMTX is running by PID or by probing port 8888."""
         pid = ProcessManager.load_pid(self.pid_file)
         if pid and ProcessManager.is_process_running(pid):
             return True

@@ -1,7 +1,24 @@
+/**
+ * Remoto AI -- Frontend Application
+ *
+ * Handles voice input (via annyang.js), text commands, authentication,
+ * live video stream configuration, chat history rendering, and the
+ * analysis panel (model info, complexity, tool calls).
+ */
+
+/** @type {boolean} Whether the microphone is currently active */
 let isListening = false;
+
+/** @type {Array<{role: string, content: string}>} Rolling conversation history (max 10) */
 let conversationHistory = [];
+
+/** @type {string|null} Session password used for HTTP Basic Auth */
 let sessionPassword = null;
+
+/** @type {string} Current speech transcript from annyang */
 let currentTranscript = '';
+
+/** @type {string|null} Backboard thread ID for persistent conversation memory */
 let threadId = localStorage.getItem('remoto_thread_id') || null;
 
 const voiceBtn = document.getElementById("voiceBtn");
@@ -20,6 +37,10 @@ const toolCalls = document.getElementById("toolCalls");
 // Chat history element
 const chatHistory = document.getElementById("chatHistory");
 
+/**
+ * Build HTTP Basic Auth headers using the session password.
+ * @returns {Object} Headers object with Authorization header, or empty if no password.
+ */
 function getAuthHeaders() {
     if (!sessionPassword) {
         return {};
@@ -30,6 +51,11 @@ function getAuthHeaders() {
     };
 }
 
+/**
+ * Fetch the session password from the /config endpoint.
+ * Called on page load and before sending commands if no password is cached.
+ * @returns {Promise<boolean>} True if authentication was successful.
+ */
 async function initializeAuth() {
     try {
         const response = await fetch("/config", {
@@ -50,6 +76,10 @@ async function initializeAuth() {
     }
 }
 
+/**
+ * Configure the video stream iframe with the HLS URL from the backend.
+ * Fetches the stream URL from /config and sets it as the iframe src.
+ */
 async function initializeStream() {
     try {
         if (!sessionPassword) {
@@ -80,6 +110,11 @@ async function initializeStream() {
     }
 }
 
+/**
+ * Set up the annyang speech recognition library with callbacks.
+ * Configures result, error, start, and end event handlers for
+ * continuous voice input that populates the text input field.
+ */
 function initializeVoice() {
     if (!annyang) {
         showError("Voice recognition library failed to load. Please refresh the page.");
@@ -117,6 +152,11 @@ function initializeVoice() {
     console.log("Annyang initialized");
 }
 
+/**
+ * Append a message bubble to the chat history panel.
+ * @param {string} role - Either 'user' or 'assistant'.
+ * @param {string} content - The message text to display.
+ */
 function addChatMessage(role, content) {
     // Remove empty state if present
     const emptyState = chatHistory.querySelector('.empty-state');
@@ -143,6 +183,11 @@ function addChatMessage(role, content) {
     chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
+/**
+ * Update the analysis panel with the selected model and task complexity.
+ * @param {string|null} model - Model identifier (e.g. "openai/gpt-4.1").
+ * @param {string|null} complexity - Task complexity ("simple", "medium", or "complex").
+ */
 function updateModelInfo(model, complexity) {
     modelInfo.innerHTML = `<span class="info-badge">${model || 'N/A'}</span>`;
     
@@ -157,6 +202,13 @@ function updateModelInfo(model, complexity) {
     complexityInfo.innerHTML = `<span class="info-badge ${complexityClass}">${complexity || '-'}</span>`;
 }
 
+/**
+ * Add a tool call entry to the analysis panel's tool calls list.
+ * Keeps only the 10 most recent entries and auto-scrolls to the bottom.
+ * @param {string} toolName - Name of the executed tool.
+ * @param {Object} args - Arguments passed to the tool.
+ * @param {{success: boolean, message?: string, error?: string}|null} result - Execution result.
+ */
 function addToolCall(toolName, args, result) {
     // Remove empty state if present
     const emptyState = toolCalls.querySelector('.empty-state');
@@ -197,25 +249,37 @@ function addToolCall(toolName, args, result) {
     toolCalls.scrollTop = toolCalls.scrollHeight;
 }
 
+/** Remove all tool call entries from the analysis panel. */
 function clearToolCalls() {
     toolCalls.innerHTML = '';
 }
 
+/** Reset the entire analysis panel (model info, complexity, and tool calls). */
 function clearAnalysisPanel() {
     modelInfo.innerHTML = '';
     complexityInfo.innerHTML = '';
     toolCalls.innerHTML = '';
 }
 
+/**
+ * Show the "Processing" notification banner at the top of the screen.
+ * @param {string} text - The command text being processed.
+ */
 function showCommandNotification(text) {
     commandText.textContent = text;
     commandNotification.classList.add("show");
 }
 
+/** Hide the processing notification banner. */
 function hideCommandNotification() {
     commandNotification.classList.remove("show");
 }
 
+/**
+ * Send a voice/text command to the backend /voice endpoint.
+ * Updates the chat history, analysis panel, and plays the audio response.
+ * @param {string} text - The command text to send.
+ */
 async function sendCommand(text) {
     showCommandNotification(text);
     
@@ -302,6 +366,10 @@ async function sendCommand(text) {
     }
 }
 
+/**
+ * Read the text input field, clear it, and send the command.
+ * Shows an error if the input is empty.
+ */
 async function sendTextCommand() {
     const text = textInput.value.trim();
     if (!text) {
@@ -313,6 +381,10 @@ async function sendTextCommand() {
     await sendCommand(text);
 }
 
+/**
+ * Display an error message that auto-dismisses after 5 seconds.
+ * @param {string} message - Error text to show.
+ */
 function showError(message) {
     errorDiv.textContent = message;
     errorDiv.classList.add("show");

@@ -1,3 +1,11 @@
+"""
+Remoto AI Backend Server
+
+FastAPI application that serves the web UI, handles voice commands, performs
+screen capture with OCR, routes AI requests through Backboard.io, and executes
+tool calls (keyboard/mouse automation) on the host machine.
+"""
+
 import pyautogui
 import io
 import os
@@ -59,7 +67,17 @@ SESSION_PASSWORD = os.getenv("REMOTE_AI_PASSWORD") or secrets.token_urlsafe(16)
 security = HTTPBasic()
 
 def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
-    """Simple password authentication"""
+    """Validate HTTP Basic Auth credentials against the session password.
+
+    Args:
+        credentials: HTTP Basic credentials extracted by FastAPI's security dependency.
+
+    Returns:
+        True if the password matches.
+
+    Raises:
+        HTTPException: 401 if the password is invalid.
+    """
     correct_password = secrets.compare_digest(credentials.password, SESSION_PASSWORD)
     if not correct_password:
         raise HTTPException(
@@ -234,9 +252,16 @@ REMEMBER:
 - Combine related tool calls for efficiency"""
 
 def get_screenshot_with_ocr() -> Tuple[str, str, float]:
-    """
-    Capture screenshot and extract text with OCR
-    Returns: (screenshot_base64, ocr_text_with_positions, scale_factor)
+    """Capture a screenshot of the desktop and extract text positions via OCR.
+
+    The screenshot is resized to 1280x720 for consistent coordinate space,
+    then Tesseract OCR extracts visible text with bounding-box positions.
+    Coordinates returned in OCR text are relative to the resized image;
+    the scale factor maps them back to the actual screen resolution.
+
+    Returns:
+        A tuple of (screenshot_base64, ocr_text_with_positions, scale_factor)
+        where ocr_text_with_positions has lines like '"Submit" at (850, 600)'.
     """
     screenshot = pyautogui.screenshot()
     original_width, original_height = screenshot.size
@@ -278,7 +303,17 @@ def get_screenshot_with_ocr() -> Tuple[str, str, float]:
     return screenshot_base64, ocr_text, scale_factor
 
 def text_to_speech(text: str) -> Optional[str]:
-    """Convert text to speech using gTTS (free, no API key needed)"""
+    """Convert text to speech and return the audio as a base64-encoded MP3 string.
+
+    Uses Google Text-to-Speech (gTTS) which requires no API key. The audio is
+    written to a temporary file, read back, and base64-encoded for transport.
+
+    Args:
+        text: The text to synthesize into speech.
+
+    Returns:
+        Base64-encoded MP3 audio string, or None if synthesis fails.
+    """
     try:
         tts = gTTS(text=text, lang='en', slow=False)
         
@@ -300,15 +335,21 @@ def text_to_speech(text: str) -> Optional[str]:
         return None
 
 async def classify_task_complexity(user_message: str, backboard_client, assistant) -> dict:
-    """
-    Use a fast LLM to analyze task complexity and recommend appropriate model.
-    Pure LLM analysis - no keyword matching!
-    
-    Returns: {
-        "complexity": "simple|medium|complex",
-        "reasoning": "why this classification",
-        "recommended_model": ("provider", "model_name")
-    }
+    """Use a lightweight LLM to classify task complexity and select the optimal model.
+
+    Sends the user's message to Gemini Flash Lite for fast classification into
+    simple/medium/complex, then maps each level to a provider and model:
+      - simple  -> google/gemini-2.5-flash-lite
+      - medium  -> openai/gpt-4.1
+      - complex -> anthropic/claude-sonnet-4
+
+    Args:
+        user_message: The raw voice command text from the user.
+        backboard_client: Initialized BackboardClient instance.
+        assistant: The Backboard assistant object.
+
+    Returns:
+        Dict with keys 'complexity', 'reasoning', and 'recommended_model' (provider, model).
     """
     classification_prompt = f"""Analyze the following user request and classify its complexity for a voice-controlled computer assistant.
 
@@ -374,9 +415,25 @@ JSON response:"""
         }
 
 async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, dict]:
-    """
-    Ask Backboard AI to execute a voice instruction with OCR data
-    Returns: (voice_response, full_response, thread_id, analysis_data)
+    """Send a voice command to Backboard.io and execute any returned tool calls.
+
+    Manages thread creation/reuse, runs the complexity classifier to pick the
+    right model, submits the message with OCR context, then enters a tool-call
+    loop (up to 10 iterations) where each tool call is executed locally and
+    results are fed back to the LLM until it produces a final text response.
+
+    After tool execution, a verification screenshot is sent back to the LLM
+    so it can confirm the actions succeeded.
+
+    Args:
+        user_message: Transcribed voice command from the user.
+        screenshot_b64: Base64-encoded PNG screenshot of the current screen.
+        ocr_text: OCR-extracted text with coordinates from the screenshot.
+        thread_id: Frontend thread ID for conversation continuity (or empty for new).
+        scale_factor: Ratio of actual screen width to the 1280px OCR image width.
+
+    Returns:
+        Tuple of (voice_response, full_response, thread_id, analysis_data).
     """
     global backboard_client, assistant, tool_executor, thread_id_mapping
     
@@ -588,8 +645,17 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     return voice_response, full_response, thread_id, analysis_data
 @app.post("/voice", response_model=VoiceResponse)
 async def voice_command(request: VoiceRequest):
-    """
-    Main voice command endpoint with OCR, custom tools, and Backboard integration
+    """Main voice command endpoint.
+
+    Captures a screenshot, runs OCR, sends the command to the AI agent,
+    executes tool calls, generates a TTS audio response, and returns
+    the result along with an updated screenshot.
+
+    Args:
+        request: VoiceRequest containing the user's text, optional thread_id, and history.
+
+    Returns:
+        VoiceResponse with the assistant message, audio, screenshot, and analysis data.
     """
     print("\n" + "=" * 60)
     print(f"USER SAID: {request.text}")
@@ -655,7 +721,13 @@ async def voice_command(request: VoiceRequest):
 # ============= STARTUP MESSAGE =============
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Backboard and display startup information"""
+    """Initialize the Backboard.io client, create the AI assistant, and upload RAG data.
+
+    Runs once when the FastAPI server starts. Sets up the BackboardClient,
+    creates an assistant with the system prompt and tool definitions, uploads
+    the keyboard shortcuts JSON for RAG retrieval, and loads any saved
+    workflows from Backboard memory.
+    """
     global backboard_client, assistant, tool_executor
     
     print("\n" + "=" * 60)

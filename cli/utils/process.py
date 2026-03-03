@@ -1,3 +1,10 @@
+"""
+Process lifecycle utilities for the Remoto CLI.
+
+Provides helpers to start background processes, track them via PID files,
+check if they are alive, and kill them gracefully or forcefully.
+"""
+
 import os
 import sys
 import subprocess
@@ -9,11 +16,23 @@ from typing import Optional, List
 
 
 class ProcessManager:
-    """Manages system processes"""
+    """Static utility class for managing background system processes via PID files."""
     
     @staticmethod
     def start_process(cmd: List[str], log_file: Path, cwd: Optional[Path] = None) -> subprocess.Popen:
-        """Start a process and redirect output to log file"""
+        """Start a background process with stdout/stderr redirected to a log file.
+
+        On Windows, creates the process in a new process group so it can be
+        killed independently of the parent shell.
+
+        Args:
+            cmd: Command and arguments to execute.
+            log_file: Path to the log file (created/truncated on start).
+            cwd: Working directory for the subprocess.
+
+        Returns:
+            The started Popen instance.
+        """
         log_file.parent.mkdir(parents=True, exist_ok=True)
         
         with open(log_file, 'w') as f:
@@ -29,7 +48,19 @@ class ProcessManager:
     
     @staticmethod
     def start_process_capture(cmd: List[str], log_file: Path, cwd: Optional[Path] = None) -> subprocess.Popen:
-        """Start process and capture output (for parsing)"""
+        """Start a background process with stdout/stderr captured via PIPE.
+
+        Used when the caller needs to read process output (e.g. to parse
+        the Cloudflare tunnel URL from stderr).
+
+        Args:
+            cmd: Command and arguments to execute.
+            log_file: Path for the log file (directory is created if needed).
+            cwd: Working directory for the subprocess.
+
+        Returns:
+            The started Popen instance with accessible stdout/stderr pipes.
+        """
         log_file.parent.mkdir(parents=True, exist_ok=True)
         
         process = subprocess.Popen(
@@ -45,7 +76,15 @@ class ProcessManager:
     
     @staticmethod
     def kill_process(pid: int, force: bool = False):
-        """Kill a process by PID"""
+        """Terminate or kill a process by PID.
+
+        On Windows or when ``force=True``, sends SIGKILL immediately.
+        Otherwise sends SIGTERM and waits up to 5 seconds before escalating.
+
+        Args:
+            pid: Process ID to terminate.
+            force: If True, skip graceful termination and kill immediately.
+        """
         try:
             process = psutil.Process(pid)
             
@@ -71,7 +110,14 @@ class ProcessManager:
     
     @staticmethod
     def is_port_open(port: int) -> bool:
-        """Check if a port is open/listening"""
+        """Check if a TCP port is in LISTEN state on this machine.
+
+        Args:
+            port: Port number to check.
+
+        Returns:
+            True if the port is listening.
+        """
         for conn in psutil.net_connections():
             if conn.laddr.port == port and conn.status == 'LISTEN':
                 return True
@@ -79,7 +125,14 @@ class ProcessManager:
     
     @staticmethod
     def find_process_by_name(name: str) -> Optional[int]:
-        """Find process PID by name"""
+        """Search running processes for one matching the given name (case-insensitive).
+
+        Args:
+            name: Substring to match against process names.
+
+        Returns:
+            PID of the first matching process, or None.
+        """
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if name.lower() in proc.info['name'].lower():

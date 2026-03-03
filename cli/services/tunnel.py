@@ -12,7 +12,18 @@ from cli.utils.installer import DependencyInstaller
 
 
 class TunnelManager:
-    """Manages Cloudflare tunnel service"""
+    """Manages a single Cloudflare quick-tunnel for a local port.
+
+    Uses ``cloudflared tunnel --url`` to create an ephemeral tunnel that
+    exposes a local HTTP port via a public ``trycloudflare.com`` URL.
+    The tunnel URL is parsed from stderr and saved to a file for later retrieval.
+
+    Args:
+        logs_dir: Directory for log files.
+        data_dir: Directory for PID and URL files.
+        port: Local port to tunnel (e.g. 8000 for API, 8888 for HLS stream).
+        name: Identifier used for PID/URL filenames (e.g. 'api_tunnel').
+    """
     
     def __init__(self, logs_dir: Path, data_dir: Path, port: int = 8000, name: str = "tunnel"):
         self.logs_dir = logs_dir
@@ -26,7 +37,14 @@ class TunnelManager:
         self.tunnel_url = None
     
     def _capture_url(self, process: subprocess.Popen) -> Optional[str]:
-        """Capture tunnel URL from stderr"""
+        """Block and read cloudflared stderr until the public tunnel URL appears.
+
+        Args:
+            process: The running cloudflared subprocess with stderr=PIPE.
+
+        Returns:
+            The full ``https://...trycloudflare.com`` URL, or None if not found.
+        """
         url = None
         
         try:
@@ -55,7 +73,15 @@ class TunnelManager:
         return url
     
     def start(self) -> str:
-        """Start Cloudflare tunnel and return URL"""
+        """Start a Cloudflare quick-tunnel and return its public URL.
+
+        If the tunnel is already running, returns the previously captured URL.
+        Otherwise launches cloudflared, blocks until the URL is captured from
+        stderr, saves it to disk, and returns it.
+
+        Returns:
+            The public HTTPS tunnel URL.
+        """
         # Check if already running
         if self.is_running():
             Logger.warning("Tunnel is already running")
@@ -116,7 +142,11 @@ class TunnelManager:
         return False
     
     def get_url(self) -> Optional[str]:
-        """Get current tunnel URL"""
+        """Read the tunnel URL from disk, if the tunnel has been started.
+
+        Returns:
+            The saved tunnel URL string, or None if no URL file exists.
+        """
         if self.url_file.exists():
             with open(self.url_file) as f:
                 return f.read().strip()

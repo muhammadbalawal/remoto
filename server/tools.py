@@ -1,6 +1,9 @@
 """
 Custom Tools for Remoto AI - Backboard Integration
-Defines and executes custom tools for computer control
+
+Defines the JSON schema for each tool (sent to Backboard.io so the LLM knows
+what tools are available) and implements the ToolExecutor class that dispatches
+and runs tool calls locally using PyAutoGUI, Backboard memory, and vision models.
 """
 
 import pyautogui
@@ -269,34 +272,69 @@ TOOL_DEFINITIONS = [
 
 
 class ToolExecutor:
-    """Executes custom tools for Remoto AI"""
+    """Dispatches and executes custom tools for computer control.
+
+    Each tool call from the LLM is routed through ``execute()`` to the
+    appropriate method. The executor holds mutable context (OCR data,
+    screenshot, scale factor) that is refreshed before each voice command
+    by the FastAPI endpoint in ``server/main.py``.
+
+    Attributes:
+        workflows: Dict of saved multi-step workflows loaded from Backboard memory.
+        ocr_data: Raw OCR text with coordinates from the latest screenshot.
+        scale_factor: Ratio to convert 1280x720 OCR coordinates to actual screen pixels.
+        backboard_client: BackboardClient for memory and vision operations.
+        assistant_id: Backboard assistant ID for memory scoping.
+        screenshot_b64: Base64-encoded screenshot for vision-based element location.
+        thread_id: Current Backboard thread ID for vision model queries.
+    """
     
     def __init__(self):
-        self.workflows = {}  # Will be populated from memory
-        self.ocr_data = None  # Set by main.py before tool execution
-        self.scale_factor = 1.0  # Set by main.py for coordinate scaling
-        self.backboard_client = None  # Set by main.py
-        self.assistant_id = None  # Set by main.py
-        self.screenshot_b64 = None  # Set by main.py for vision-based clicking
-        self.thread_id = None  # Set by main.py for vision model calls
+        self.workflows = {}
+        self.ocr_data = None
+        self.scale_factor = 1.0
+        self.backboard_client = None
+        self.assistant_id = None
+        self.screenshot_b64 = None
+        self.thread_id = None
     
     def set_ocr_context(self, ocr_data: str, scale_factor: float):
-        """Set current OCR data and scale factor for find_and_click"""
+        """Update the OCR context before processing a new voice command.
+
+        Args:
+            ocr_data: Extracted text with coordinates, e.g. '"Submit" at (850, 600)'.
+            scale_factor: Multiplier to convert 1280px-based coordinates to actual screen pixels.
+        """
         self.ocr_data = ocr_data
         self.scale_factor = scale_factor
     
     def set_vision_context(self, screenshot_b64: str, thread_id: str):
-        """Set screenshot and thread_id for vision-based element location"""
+        """Provide the current screenshot for vision-based element location.
+
+        Args:
+            screenshot_b64: Base64-encoded PNG of the current screen (1280x720).
+            thread_id: Backboard thread ID for sending vision queries.
+        """
         self.screenshot_b64 = screenshot_b64
         self.thread_id = thread_id
     
     def set_backboard_client(self, client, assistant_id: str):
-        """Set Backboard client for memory operations"""
+        """Inject the Backboard client for memory and vision operations.
+
+        Args:
+            client: Initialized BackboardClient instance.
+            assistant_id: The Backboard assistant ID to scope memory operations.
+        """
         self.backboard_client = client
         self.assistant_id = assistant_id
     
     async def load_workflows_from_memory(self):
-        """Load workflows from Backboard memory"""
+        """Load saved workflows from Backboard persistent memory into local cache.
+
+        Queries all memories for this assistant and filters for entries with
+        metadata type 'workflow'. Each workflow is parsed from JSON and stored
+        in ``self.workflows`` keyed by workflow name.
+        """
         if not self.backboard_client or not self.assistant_id:
             return
         
@@ -319,7 +357,17 @@ class ToolExecutor:
             print(f"Warning: Could not load workflows from memory: {e}")
     
     async def save_workflow_to_memory(self, workflow_name: str, workflow_data: Dict):
-        """Save workflow to Backboard memory"""
+        """Persist a workflow to Backboard memory and update the local cache.
+
+        Falls back to in-memory-only storage if the Backboard client is unavailable.
+
+        Args:
+            workflow_name: Unique identifier for the workflow (e.g. 'work_mode').
+            workflow_data: Full workflow dict including name, description, and steps.
+
+        Returns:
+            True if the workflow was saved (either to Backboard or in-memory).
+        """
         if not self.backboard_client or not self.assistant_id:
             # Fallback to in-memory only
             self.workflows[workflow_name] = workflow_data
@@ -341,7 +389,15 @@ class ToolExecutor:
             return True
     
     async def execute(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a tool by name with given arguments"""
+        """Route a tool call to the appropriate handler method.
+
+        Args:
+            tool_name: Name of the tool to execute (must match a TOOL_DEFINITIONS entry).
+            arguments: Keyword arguments parsed from the LLM's tool call.
+
+        Returns:
+            Dict with at least 'success' (bool) and either 'message' or 'error'.
+        """
         try:
             if tool_name == "launch_app":
                 return self.launch_app(**arguments)
@@ -373,7 +429,14 @@ class ToolExecutor:
             return {"success": False, "error": str(e)}
     
     def launch_app(self, app_name: str) -> Dict[str, Any]:
-        """Launch Windows application via Start menu"""
+        """Open an application by typing its name into the Start menu search.
+
+        Args:
+            app_name: Application name to search for (e.g. 'chrome', 'notepad').
+
+        Returns:
+            Dict with 'success' and 'message' or 'error'.
+        """
         try:
             pyautogui.press('win')
             time.sleep(0.5)
@@ -391,7 +454,17 @@ class ToolExecutor:
             return {"success": False, "error": str(e)}
     
     def navigate_url(self, url: str, new_tab: bool = False) -> Dict[str, Any]:
-        """Navigate to URL in browser"""
+        """Focus the browser address bar and navigate to a URL.
+
+        Automatically prepends 'https://' if no protocol is specified.
+
+        Args:
+            url: Target URL (e.g. 'github.com' or 'https://github.com').
+            new_tab: If True, opens a new tab before navigating.
+
+        Returns:
+            Dict with 'success' and 'message' or 'error'.
+        """
         try:
             # Add https:// if not present
             if not url.startswith(('http://', 'https://')):
@@ -420,7 +493,22 @@ class ToolExecutor:
             return {"success": False, "error": str(e)}
     
     async def find_and_click(self, element_text: str, click_type: str = "single") -> Dict[str, Any]:
-        """Find UI element by text and click it (with vision fallback)"""
+        """Locate a UI element on screen and click it using a two-stage strategy.
+
+        Stage 1 (fast): Search the OCR text data for a matching element and use
+        its coordinates. Stage 2 (fallback): If OCR fails, send the screenshot
+        to a vision model (Claude Sonnet) to locate the element visually.
+
+        Coordinates are scaled from the 1280x720 OCR space to the actual screen
+        resolution before clicking.
+
+        Args:
+            element_text: Text label or description of the element to find.
+            click_type: One of 'single', 'double', or 'right'.
+
+        Returns:
+            Dict with 'success', 'method' ('ocr' or 'vision'), 'coordinates', and 'message'.
+        """
         try:
             # STEP 1: Try OCR text matching (fast)
             if self.ocr_data:
@@ -573,7 +661,17 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     async def execute_workflow_async(self, workflow_name: str) -> Dict[str, Any]:
-        """Execute a saved workflow (async version)"""
+        """Run a previously saved multi-step workflow by name.
+
+        Executes each step sequentially with a brief pause between steps.
+        Stops immediately if any step fails.
+
+        Args:
+            workflow_name: Name of the saved workflow to execute.
+
+        Returns:
+            Dict with 'success', 'steps_completed', and 'message' or 'error'.
+        """
         try:
             if workflow_name not in self.workflows:
                 return {
@@ -614,7 +712,11 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def list_workflows(self) -> Dict[str, Any]:
-        """List all available workflows"""
+        """Return metadata for all saved workflows.
+
+        Returns:
+            Dict with 'success', 'workflows' (list of name/description/step_count), and 'count'.
+        """
         try:
             workflows_info = []
             for name, workflow in self.workflows.items():
@@ -634,7 +736,16 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     async def create_workflow(self, workflow_name: str, steps: list, description: str = "") -> Dict[str, Any]:
-        """Create and save a new workflow"""
+        """Define and persist a new multi-step workflow.
+
+        Args:
+            workflow_name: Unique name for the workflow (e.g. 'work_mode').
+            steps: List of step dicts, each with 'tool' and 'args' keys.
+            description: Human-readable description of the workflow's purpose.
+
+        Returns:
+            Dict with 'success', 'workflow_name', and 'steps_count'.
+        """
         try:
             workflow_data = {
                 "workflow_name": workflow_name,
@@ -662,7 +773,16 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     async def save_learned_shortcut(self, app: str, action: str, shortcut: str) -> Dict[str, Any]:
-        """Save a newly learned shortcut to Backboard memory"""
+        """Persist a newly discovered keyboard shortcut to Backboard memory.
+
+        Args:
+            app: Application name the shortcut belongs to (e.g. 'VSCode').
+            action: Description of the action (e.g. 'toggle terminal').
+            shortcut: Key combination string (e.g. 'Ctrl+`').
+
+        Returns:
+            Dict with 'success' and 'message'.
+        """
         if not self.backboard_client or not self.assistant_id:
             return {"success": False, "error": "Backboard client not initialized"}
         
@@ -690,7 +810,15 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def type_text(self, text: str, interval: float = 0.05) -> Dict[str, Any]:
-        """Type text on the keyboard"""
+        """Simulate typing text on the keyboard character by character.
+
+        Args:
+            text: The string to type.
+            interval: Delay in seconds between each keystroke.
+
+        Returns:
+            Dict with 'success' and 'message'.
+        """
         try:
             pyautogui.write(text, interval=interval)
             return {
@@ -702,7 +830,14 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def press_key(self, key: str) -> Dict[str, Any]:
-        """Press a single key"""
+        """Press and release a single keyboard key.
+
+        Args:
+            key: Key name recognized by PyAutoGUI (e.g. 'enter', 'tab', 'esc').
+
+        Returns:
+            Dict with 'success' and 'message'.
+        """
         try:
             pyautogui.press(key)
             return {
@@ -714,7 +849,14 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def press_hotkey(self, keys: list) -> Dict[str, Any]:
-        """Press a keyboard shortcut (key combination)"""
+        """Press a keyboard shortcut (multiple keys held simultaneously).
+
+        Args:
+            keys: List of key names to press together (e.g. ['ctrl', 'c']).
+
+        Returns:
+            Dict with 'success' and 'message'.
+        """
         try:
             pyautogui.hotkey(*keys)
             keys_str = '+'.join(keys)
@@ -727,7 +869,20 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def click_position(self, x: int, y: int, clicks: int = 1, button: str = 'left') -> Dict[str, Any]:
-        """Click at specific screen coordinates"""
+        """Click at specific screen coordinates (auto-scaled from OCR space).
+
+        Coordinates are expected in the 1280x720 OCR coordinate space and are
+        multiplied by ``self.scale_factor`` to reach actual screen pixels.
+
+        Args:
+            x: X coordinate in OCR space.
+            y: Y coordinate in OCR space.
+            clicks: Number of clicks (2 for double-click).
+            button: Mouse button -- 'left' or 'right'.
+
+        Returns:
+            Dict with 'success', scaled coordinates, and 'message'.
+        """
         try:
             # Scale coordinates using the scale factor
             scaled_x = int(x * self.scale_factor)
@@ -753,7 +908,14 @@ JSON response:"""
             return {"success": False, "error": str(e)}
     
     def scroll_page(self, amount: int) -> Dict[str, Any]:
-        """Scroll up or down"""
+        """Scroll the mouse wheel up or down.
+
+        Args:
+            amount: Scroll units -- positive scrolls up, negative scrolls down.
+
+        Returns:
+            Dict with 'success', 'amount', and 'message'.
+        """
         try:
             pyautogui.scroll(amount)
             direction = "up" if amount > 0 else "down"

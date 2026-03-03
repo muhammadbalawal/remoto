@@ -1,10 +1,17 @@
+"""
+Centralized configuration defaults for the Remoto CLI.
+
+Provides streaming resolution, port assignments, and logging settings
+used across all service managers.
+"""
+
 import os
 from pathlib import Path
 from typing import Dict, Any
 
 
 class Config:
-    """Configuration management"""
+    """Holds default configuration values and provides dot-notation access."""
     
     DEFAULT_CONFIG = {
         "streaming": {
@@ -30,7 +37,15 @@ class Config:
         self.config = self.DEFAULT_CONFIG.copy()
     
     def get(self, key: str, default: Any = None) -> Any:
-        """Get config value by dot notation key"""
+        """Retrieve a configuration value using dot-notation.
+
+        Args:
+            key: Dot-separated path (e.g. 'streaming.resolution' or 'backend.port').
+            default: Value returned if the key path does not exist.
+
+        Returns:
+            The configuration value, or *default* if not found.
+        """
         keys = key.split('.')
         value = self.config
         

@@ -14,21 +14,24 @@ from cli.config import Config
 
 
 class Orchestrator:
-    """Orchestrates all Remote AI services"""
+    """Coordinates the full lifecycle of all Remoto AI services.
+
+    Manages five services in a specific startup/shutdown order:
+    MediaMTX -> FFmpeg -> Cloudflare tunnels (API + stream) -> FastAPI backend.
+
+    Data and log directories are created under ``~/.remoto/`` on first run.
+    """
     
     def __init__(self):
         self.base_dir = Path(__file__).parent.parent
         self.data_dir = Path.home() / ".remoto" / "data"
         self.logs_dir = Path.home() / ".remoto" / "logs"
         
-        # Create directories
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize config
         self.config = Config()
         
-        # Initialize service managers
         self.mediamtx = MediaMTXManager(self.logs_dir, self.data_dir)
         self.ffmpeg = FFmpegManager(self.logs_dir, self.data_dir)
         self.api_tunnel = TunnelManager(self.logs_dir, self.data_dir, port=8000, name="api_tunnel")
@@ -36,7 +39,16 @@ class Orchestrator:
         self.backend = BackendManager(self.base_dir / "server", self.logs_dir, self.data_dir)
     
     def start(self, start_frontend=True, skip_dependency_check=False):
-        """Start all services"""
+        """Start all services in order and block until Ctrl+C.
+
+        Startup sequence: dependency check -> password generation -> MediaMTX ->
+        FFmpeg -> Cloudflare tunnels -> FastAPI backend. On KeyboardInterrupt,
+        all services are stopped gracefully.
+
+        Args:
+            start_frontend: If True, serves the web UI (currently always True).
+            skip_dependency_check: If True, skips the ``remoto setup`` verification.
+        """
         try:
             # Check dependencies first (unless skipped)
             if not skip_dependency_check:
@@ -106,7 +118,7 @@ class Orchestrator:
             sys.exit(1)
     
     def stop(self):
-        """Stop all services"""
+        """Stop all services in reverse startup order."""
         Logger.info("Stopping backend...")
         self.backend.stop()
         
@@ -127,7 +139,7 @@ class Orchestrator:
         print("")
     
     def status(self):
-        """Show status of all services"""
+        """Print a formatted status table of all services, URLs, and the session password."""
         print("")
         print("=" * 60)
         print("REMOTE AI STATUS")
@@ -166,7 +178,13 @@ class Orchestrator:
         print("")
     
     def _display_access_info(self, api_tunnel_url: str, stream_tunnel_url: str, password: str):
-        """Display access information"""
+        """Print the connection details a user needs to access Remoto from their phone.
+
+        Args:
+            api_tunnel_url: Public Cloudflare tunnel URL for the API.
+            stream_tunnel_url: Public Cloudflare tunnel URL for the video stream.
+            password: Current session password for authentication.
+        """
         print("=" * 60)
         print("REMOTE AI READY")
         print("=" * 60)

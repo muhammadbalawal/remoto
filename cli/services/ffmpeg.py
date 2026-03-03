@@ -11,7 +11,12 @@ from cli.utils.installer import DependencyInstaller
 
 
 class FFmpegManager:
-    """Manages FFmpeg streaming service"""
+    """Manages the FFmpeg screen-capture-to-RTSP streaming process.
+
+    Detects the host GPU (NVIDIA, AMD, or CPU fallback) and builds the
+    appropriate FFmpeg command for the current OS. The captured desktop
+    is streamed over RTSP to the local MediaMTX server.
+    """
     
     def __init__(self, logs_dir: Path, data_dir: Path):
         self.logs_dir = logs_dir
@@ -21,7 +26,14 @@ class FFmpegManager:
         self.process = None
     
     def _detect_gpu(self) -> str:
-        """Detect GPU type"""
+        """Detect the available GPU for hardware-accelerated video encoding.
+
+        Checks for NVIDIA (via ``nvidia-smi``) first, then AMD (via WMI on Windows).
+        Falls back to 'cpu' if neither is found.
+
+        Returns:
+            One of 'nvidia', 'amd', or 'cpu'.
+        """
         # Try NVIDIA
         try:
             subprocess.run(["nvidia-smi"], 
@@ -49,7 +61,15 @@ class FFmpegManager:
         return "cpu"
     
     def _get_ffmpeg_command(self) -> list:
-        """Get FFmpeg command based on OS and GPU"""
+        """Build the FFmpeg command line for desktop capture on the current OS and GPU.
+
+        Selects the appropriate input format (gdigrab/avfoundation/x11grab) and
+        encoder (h264_nvenc/h264_amf/h264_videotoolbox/libx264) based on
+        platform and GPU detection.
+
+        Returns:
+            List of command-line arguments for subprocess.
+        """
         gpu = self._detect_gpu()
         
         if sys.platform == 'win32':
@@ -144,7 +164,11 @@ class FFmpegManager:
             ]
     
     def start(self):
-        """Start FFmpeg streaming"""
+        """Start FFmpeg desktop capture and stream to the local MediaMTX RTSP server.
+
+        Locates the FFmpeg binary, detects the GPU encoder, launches the process
+        in the background, and verifies it is still running after 3 seconds.
+        """
         # Check if already running
         if self.is_running():
             Logger.warning("FFmpeg is already running")

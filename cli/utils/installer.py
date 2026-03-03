@@ -1,3 +1,10 @@
+"""
+Dependency auto-installer for the Remoto CLI.
+
+Checks for required external tools (Cloudflared, FFmpeg, MediaMTX, Tesseract)
+and offers to download/install them automatically on Windows, macOS, and Linux.
+"""
+
 import os
 import sys
 import subprocess
@@ -10,7 +17,7 @@ from cli.utils.logger import Logger
 
 
 class DependencyInstaller:
-    """Automatically install required dependencies"""
+    """Detects, downloads, and installs external dependencies required by Remoto."""
     
     @staticmethod
     def is_windows():
@@ -26,7 +33,17 @@ class DependencyInstaller:
     
     @staticmethod
     def find_command_path(command):
-        """Find the full path to a command, checking Homebrew paths on macOS"""
+        """Locate the absolute path to an executable, including Homebrew paths on macOS.
+
+        On macOS, checks Apple Silicon and Intel Homebrew directories before
+        falling back to ``shutil.which``.
+
+        Args:
+            command: Executable name (e.g. 'ffmpeg', 'cloudflared').
+
+        Returns:
+            Absolute path string if found, or None.
+        """
         if DependencyInstaller.is_mac():
             brew_paths = [
                 "/opt/homebrew/bin",  # Apple Silicon
@@ -47,7 +64,18 @@ class DependencyInstaller:
     
     @staticmethod
     def check_command(command):
-        """Check if a command exists"""
+        """Verify that a command-line tool is installed and executable.
+
+        On Windows, tries multiple strategies: common install paths (for
+        Tesseract), PATH lookup via ``shutil.which``, and shell execution
+        with version flags. On Unix, uses ``find_command_path`` + version check.
+
+        Args:
+            command: Tool name (e.g. 'ffmpeg', 'tesseract').
+
+        Returns:
+            True if the command is found and responds to a version flag.
+        """
         # On Windows, try multiple approaches since PATH might not be fully available
         if DependencyInstaller.is_windows():
             # Special handling for Tesseract - check common installation paths first
@@ -147,7 +175,15 @@ class DependencyInstaller:
     
     @staticmethod
     def download_file(url, destination):
-        """Download a file with progress"""
+        """Download a file from a URL to a local path.
+
+        Args:
+            url: Source URL to download.
+            destination: Local file path to save to.
+
+        Returns:
+            True on success, False on failure.
+        """
         Logger.info(f"Downloading from {url}...")
         try:
             urllib.request.urlretrieve(url, destination)
@@ -159,7 +195,15 @@ class DependencyInstaller:
     
     @staticmethod
     def extract_zip(zip_path, extract_to):
-        """Extract a zip file"""
+        """Extract a ZIP archive to a target directory.
+
+        Args:
+            zip_path: Path to the ZIP file.
+            extract_to: Directory to extract contents into.
+
+        Returns:
+            True on success, False on failure.
+        """
         Logger.info(f"Extracting {zip_path}...")
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -172,7 +216,14 @@ class DependencyInstaller:
     
     @staticmethod
     def add_to_path_windows(directory):
-        """Add directory to Windows PATH"""
+        """Append a directory to the current user's PATH environment variable on Windows.
+
+        Args:
+            directory: Absolute path to add to the user PATH.
+
+        Returns:
+            True if the directory was added (or already present), False on error.
+        """
         try:
             # Get current PATH
             result = subprocess.run(
@@ -444,7 +495,11 @@ class DependencyInstaller:
     
     @staticmethod
     def check_and_install_all():
-        """Check and install all dependencies"""
+        """Check all four external dependencies and offer to auto-install any that are missing.
+
+        Returns:
+            True if all dependencies are satisfied, False otherwise.
+        """
         missing = []
         
         print("")
