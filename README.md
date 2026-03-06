@@ -1,13 +1,13 @@
 # Remoto AI
 
-**Voice-controlled remote computer access from anywhere in the world.**
+**AI-powered remote computer access from anywhere in the world.**
 
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Built at McHacks 13](https://img.shields.io/badge/Built%20at-McHacks%2013-orange.svg)](https://mchacks.ca/)
 [![Powered by Backboard.io](https://img.shields.io/badge/Powered%20by-Backboard.io-purple.svg)](https://backboard.io/)
 
-Remoto AI lets you control your home PC from any device using voice commands. It combines speech recognition, AI-powered screen understanding, and real-time streaming to create an intelligent assistant that learns your workflows and remembers your preferences -- powered by [Backboard.io](https://backboard.io/).
+Remoto AI lets you control your home PC from any device using text commands. It combines AI-powered screen understanding and real-time streaming to create an intelligent assistant that learns your workflows and remembers your preferences -- powered by [Backboard.io](https://backboard.io/).
 
 ![Architecture Diagram](./public/Remoto.png)
 
@@ -32,7 +32,7 @@ Remoto AI lets you control your home PC from any device using voice commands. It
 
 ## Features
 
-- **Voice Control** -- Speak commands on your phone, and Remoto executes them on your PC
+- **Remote Control** -- Send commands from your phone, and Remoto executes them on your PC
 - **AI Screen Understanding** -- Captures and analyzes screen content with OCR (Tesseract) and vision models
 - **Smart Model Routing** -- Automatically selects the best LLM (Gemini Flash, GPT-4.1, Claude Sonnet) based on task complexity
 - **Persistent Memory** -- Remembers your workflows, shortcuts, and preferences across sessions
@@ -48,7 +48,7 @@ Remoto AI lets you control your home PC from any device using voice commands. It
 ```mermaid
 flowchart LR
     subgraph phone [Your Phone]
-        Browser["Browser UI\n(Voice + Stream)"]
+        Browser["Browser UI\n(Text + Stream)"]
     end
 
     subgraph cloud [Cloud Services]
@@ -63,8 +63,8 @@ flowchart LR
         PyAutoGUI["PyAutoGUI\n(Keyboard/Mouse)"]
     end
 
-    Browser -->|"Voice command\n(HTTPS)"| CFTunnel
-    CFTunnel -->|"/voice"| Backend
+    Browser -->|"Text command\n(HTTPS)"| CFTunnel
+    CFTunnel -->|"/command"| Backend
     Backend -->|"AI reasoning"| Backboard
     Backboard -->|"Tool calls"| Backend
     Backend -->|"Execute actions"| PyAutoGUI
@@ -76,11 +76,11 @@ flowchart LR
 ### How It Works
 
 1. **Authentication** -- You open the Cloudflare tunnel URL on your phone and enter your session password.
-2. **Voice Input** -- Speech is captured via [annyang.js](https://github.com/TalAter/annyang) and sent as text to the backend.
+2. **Command Input** -- Type a command in the text input and send it to the backend.
 3. **Screen Analysis** -- The backend captures a screenshot, resizes it to 1280x720, and runs Tesseract OCR to extract on-screen text with coordinates.
-4. **AI Reasoning** -- The transcribed command + OCR context + screenshot are sent to Backboard.io, which routes to the optimal LLM and returns tool calls.
+4. **AI Reasoning** -- The command + OCR context + screenshot are sent to Backboard.io, which routes to the optimal LLM and returns tool calls.
 5. **Action Execution** -- Tool calls are executed via PyAutoGUI (clicking, typing, launching apps, etc.) on the home PC.
-6. **Feedback** -- A spoken confirmation is generated with Google TTS and played back; the live stream shows the updated screen.
+6. **Feedback** -- A text confirmation is returned and the live stream shows the updated screen.
 
 ---
 
@@ -88,14 +88,13 @@ flowchart LR
 
 | Layer | Technologies |
 |-------|-------------|
-| **Frontend** | Vanilla HTML/CSS/JS, [annyang.js](https://github.com/TalAter/annyang) (speech recognition) |
+| **Frontend** | Vanilla HTML/CSS/JS |
 | **Backend** | Python, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/) |
 | **AI / LLM** | [Backboard.io](https://backboard.io/) (LLM routing, memory, RAG, tools) |
 | **Computer Vision** | [OpenCV](https://opencv.org/), [Tesseract OCR](https://github.com/tesseract-ocr/tesseract), [Pillow](https://pillow.readthedocs.io/) |
 | **Automation** | [PyAutoGUI](https://pyautogui.readthedocs.io/) |
 | **Streaming** | [FFmpeg](https://ffmpeg.org/), [MediaMTX](https://github.com/bluenviron/mediamtx) |
 | **Tunneling** | [Cloudflare Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) |
-| **TTS** | [gTTS](https://gtts.readthedocs.io/) (Google Text-to-Speech) |
 | **CLI** | [Click](https://click.palletsprojects.com/) |
 
 ---
@@ -133,7 +132,7 @@ remoto start
 ```
 
 Once started, Remoto will display:
-- **API URL** -- Open this on your phone to access the voice interface
+- **API URL** -- Open this on your phone to access the control interface
 - **Session Password** -- Enter this when prompted for authentication
 
 ---
@@ -173,18 +172,17 @@ The FastAPI backend exposes three endpoints:
 | `GET` | `/` | Basic | Serves the web UI (`index.html`) |
 | `GET` | `/health` | None | Health check -- returns `{"status": "healthy"}` |
 | `GET` | `/config` | Basic | Returns stream URL and session config |
-| `POST` | `/voice` | None | Main voice command endpoint |
+| `POST` | `/command` | None | Main command endpoint |
 
-### `POST /voice`
+### `POST /command`
 
-Accepts a voice command, captures a screenshot, runs OCR, queries the AI, executes tool calls, and returns a response with audio.
+Accepts a text command, captures a screenshot, runs OCR, queries the AI, executes tool calls, and returns a response.
 
 **Request body:**
 ```json
 {
   "text": "open chrome and go to github",
-  "thread_id": "optional-thread-id",
-  "history": []
+  "thread_id": "optional-thread-id"
 }
 ```
 
@@ -192,7 +190,6 @@ Accepts a voice command, captures a screenshot, runs OCR, queries the AI, execut
 ```json
 {
   "assistant_message": "Opened Chrome and navigated to GitHub.",
-  "assistant_audio_base64": "base64-encoded-mp3...",
   "screenshot_base64": "base64-encoded-png...",
   "thread_id": "thread-id",
   "success": true,
@@ -272,13 +269,13 @@ remoto/
 │       ├── process.py          # Process lifecycle management
 │       └── security.py         # Password and token generation
 ├── server/                     # Backend application
-│   ├── main.py                 # FastAPI app (voice endpoint, OCR, AI)
+│   ├── main.py                 # FastAPI app (command endpoint, OCR, AI)
 │   ├── tools.py                # Tool definitions and executor
 │   ├── shortcuts.json          # 200+ keyboard shortcuts for RAG
 │   ├── .env.example            # Environment variable template
 │   └── static/                 # Frontend assets
 │       ├── index.html          # Main UI page
-│       ├── app.js              # Frontend logic (auth, voice, chat)
+│       ├── app.js              # Frontend logic (auth, commands, chat)
 │       └── styles.css          # Responsive styling (light/dark)
 ├── public/
 │   └── Remoto.png              # Architecture diagram

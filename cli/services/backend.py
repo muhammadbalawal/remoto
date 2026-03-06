@@ -34,7 +34,7 @@ class BackendManager:
     def _update_env(self, stream_url: str, password: str):
         """Merge runtime values into the backend ``.env`` file.
 
-        Preserves any existing keys (like BACKBOARD_API_KEY) while replacing
+        Preserves any existing keys while replacing
         STREAM_URL and REMOTE_AI_PASSWORD with the current session values.
 
         Args:
