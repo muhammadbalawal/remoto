@@ -2,12 +2,10 @@
 Simple timestamped logger for CLI output.
 
 Provides static methods for info, success, warning, and error messages
-printed to stdout, plus a file-logging helper for persistent logs.
+printed to stdout.
 """
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 
 class Logger:
@@ -43,18 +41,3 @@ class Logger:
     def error(message: str):
         """Log error message"""
         Logger.log(message, "ERROR")
-    
-    @staticmethod
-    def write_log(log_file: Path, message: str):
-        """Append a timestamped message to a log file on disk.
-
-        Creates parent directories if they don't exist.
-
-        Args:
-            log_file: Path to the log file.
-            message: Message text to write.
-        """
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_file, 'a') as f:
-            f.write(f"[{timestamp}] {message}\n")

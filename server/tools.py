@@ -276,7 +276,7 @@ class ToolExecutor:
 
     Each tool call from the LLM is routed through ``execute()`` to the
     appropriate method. The executor holds mutable context (OCR data,
-    screenshot, scale factor) that is refreshed before each voice command
+    screenshot, scale factor) that is refreshed before each command
     by the FastAPI endpoint in ``server/main.py``.
 
     Attributes:
@@ -299,7 +299,7 @@ class ToolExecutor:
         self.thread_id = None
     
     def set_ocr_context(self, ocr_data: str, scale_factor: float):
-        """Update the OCR context before processing a new voice command.
+        """Update the OCR context before processing a new command.
 
         Args:
             ocr_data: Extracted text with coordinates, e.g. '"Submit" at (850, 600)'.

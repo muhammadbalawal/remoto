@@ -3,7 +3,7 @@ import sys
 import time
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from cli.utils.process import ProcessManager
 from cli.utils.logger import Logger

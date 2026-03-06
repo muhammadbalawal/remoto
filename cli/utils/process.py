@@ -124,24 +124,6 @@ class ProcessManager:
         return False
     
     @staticmethod
-    def find_process_by_name(name: str) -> Optional[int]:
-        """Search running processes for one matching the given name (case-insensitive).
-
-        Args:
-            name: Substring to match against process names.
-
-        Returns:
-            PID of the first matching process, or None.
-        """
-        for proc in psutil.process_iter(['pid', 'name']):
-            try:
-                if name.lower() in proc.info['name'].lower():
-                    return proc.info['pid']
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        return None
-    
-    @staticmethod
     def save_pid(pid_file: Path, pid: int):
         """Save PID to file"""
         pid_file.parent.mkdir(parents=True, exist_ok=True)

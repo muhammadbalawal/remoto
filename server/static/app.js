@@ -1,13 +1,10 @@
 /**
  * Remoto AI -- Frontend Application
  *
- * Handles voice input (via annyang.js), text commands, authentication,
- * live video stream configuration, chat history rendering, and the
- * analysis panel (model info, complexity, tool calls).
+ * Handles text commands, authentication, live video stream configuration,
+ * chat history rendering, and the analysis panel (model info, complexity,
+ * tool calls).
  */
-
-/** @type {boolean} Whether the microphone is currently active */
-let isListening = false;
 
 /** @type {Array<{role: string, content: string}>} Rolling conversation history (max 10) */
 let conversationHistory = [];
@@ -15,13 +12,9 @@ let conversationHistory = [];
 /** @type {string|null} Session password used for HTTP Basic Auth */
 let sessionPassword = null;
 
-/** @type {string} Current speech transcript from annyang */
-let currentTranscript = '';
-
 /** @type {string|null} Backboard thread ID for persistent conversation memory */
 let threadId = localStorage.getItem('remoto_thread_id') || null;
 
-const voiceBtn = document.getElementById("voiceBtn");
 const textInput = document.getElementById("textInput");
 const sendBtn = document.getElementById("sendBtn");
 const errorDiv = document.getElementById("error");
@@ -108,48 +101,6 @@ async function initializeStream() {
     } catch (error) {
         console.error("Stream config error:", error);
     }
-}
-
-/**
- * Set up the annyang speech recognition library with callbacks.
- * Configures result, error, start, and end event handlers for
- * continuous voice input that populates the text input field.
- */
-function initializeVoice() {
-    if (!annyang) {
-        showError("Voice recognition library failed to load. Please refresh the page.");
-        voiceBtn.disabled = true;
-        return;
-    }
-
-    annyang.addCallback('result', (phrases) => {
-        if (phrases && phrases.length > 0) {
-            currentTranscript = phrases[0];
-            textInput.value = currentTranscript;
-        }
-    });
-
-    annyang.addCallback('error', (error) => {
-        console.error("Speech error:", error);
-    });
-
-    annyang.addCallback('start', () => {
-        console.log("Speech started");
-    });
-
-    annyang.addCallback('end', () => {
-        console.log("Speech ended");
-        if (isListening) {
-            setTimeout(() => {
-                if (isListening) {
-                    annyang.start({ autoRestart: false, continuous: false });
-                }
-            }, 100);
-        }
-    });
-
-    annyang.setLanguage('en-US');
-    console.log("Annyang initialized");
 }
 
 /**
@@ -294,7 +245,7 @@ async function sendCommand(text) {
             await initializeAuth();
         }
 
-        const response = await fetch("/voice", {
+        const response = await fetch("/command", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -303,7 +254,6 @@ async function sendCommand(text) {
             body: JSON.stringify({
                 text: text,
                 thread_id: threadId,
-                history: conversationHistory,
             }),
         });
 
@@ -347,11 +297,6 @@ async function sendCommand(text) {
             }
         }
 
-        if (result.assistant_audio_base64) {
-            const audio = new Audio("data:audio/mp3;base64," + result.assistant_audio_base64);
-            audio.play().catch(err => console.error("Audio error:", err));
-        }
-
         // Hide notification after command completes
         setTimeout(() => {
             hideCommandNotification();
@@ -393,26 +338,6 @@ function showError(message) {
     }, 5000);
 }
 
-voiceBtn.addEventListener("click", () => {
-    if (!annyang) {
-        showError("Voice recognition not available");
-        return;
-    }
-
-    if (isListening) {
-        isListening = false;
-        annyang.abort();
-        voiceBtn.classList.remove("listening");
-        console.log("Stopped listening");
-    } else {
-        isListening = true;
-        currentTranscript = '';
-        voiceBtn.classList.add("listening");
-        annyang.start({ autoRestart: false, continuous: false });
-        console.log("Started listening");
-    }
-});
-
 sendBtn.addEventListener("click", sendTextCommand);
 
 textInput.addEventListener("keypress", (e) => {
@@ -424,5 +349,4 @@ textInput.addEventListener("keypress", (e) => {
 window.addEventListener("load", async () => {
     await initializeAuth();
     initializeStream();
-    initializeVoice();
 });

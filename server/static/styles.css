@@ -298,65 +298,6 @@ body {
     align-items: center;
 }
 
-.voice-button {
-    padding: 0.875rem;
-    width: auto;
-    height: auto;
-    aspect-ratio: 1;
-    border-radius: var(--radius);
-    background: var(--foreground);
-    border: 1px solid var(--border);
-    color: var(--background);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.voice-button svg {
-    width: 20px;
-    height: 20px;
-}
-
-.voice-button:hover:not(:disabled) {
-    background: var(--primary-hover);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-.voice-button:active:not(:disabled) {
-    transform: translateY(1px);
-}
-
-.voice-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.voice-button.listening {
-    background: var(--muted-foreground);
-    border-color: var(--foreground);
-    border-width: 2px;
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-.voice-button.listening svg {
-    color: var(--foreground);
-}
-
-@keyframes pulse {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.4);
-        transform: scale(1);
-    }
-    50% {
-        box-shadow: 0 0 0 8px rgba(0, 0, 0, 0);
-        transform: scale(1.05);
-    }
-}
-
 .text-input-container {
     display: flex;
     gap: 0.75rem;

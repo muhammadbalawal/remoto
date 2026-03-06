@@ -9,7 +9,7 @@ with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 setup(
     name="remoto-ai",
     version="1.0.0",
-    description="Voice-controlled remote computer access with AI",
+    description="AI-powered remote computer access and automation",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Muhammad Balawal",
@@ -28,7 +28,6 @@ setup(
         "pyautogui>=0.9",
         "opencv-python>=4.8",
         "pytesseract>=0.3",
-        "gtts>=2.3",
         "backboard-sdk>=1.4.0",
         "pillow>=10.0",
         "numpy>=1.24",

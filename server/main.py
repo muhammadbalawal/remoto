@@ -1,7 +1,7 @@
 """
 Remoto AI Backend Server
 
-FastAPI application that serves the web UI, handles voice commands, performs
+FastAPI application that serves the web UI, handles user commands, performs
 screen capture with OCR, routes AI requests through Backboard.io, and executes
 tool calls (keyboard/mouse automation) on the host machine.
 """
@@ -19,14 +19,13 @@ from PIL import Image
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 from typing import List, Optional, Tuple, Dict, Any
 import tempfile
-from gtts import gTTS
 import pytesseract
 import cv2
 import numpy as np
@@ -133,35 +132,28 @@ async def health_check():
 
 # ============= SSE ENDPOINT =============
 # ============= MODELS =============
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class VoiceRequest(BaseModel):
+class CommandRequest(BaseModel):
     text: str
     thread_id: Optional[str] = None
-    history: Optional[List[ChatMessage]] = []  # Kept for backward compatibility
 
 class AnalysisData(BaseModel):
     model: Optional[str] = None
     complexity: Optional[str] = None
     tool_calls: Optional[List[dict]] = []
 
-class VoiceResponse(BaseModel):
+class CommandResponse(BaseModel):
     assistant_message: str
-    assistant_audio_base64: Optional[str] = None
     screenshot_base64: str
     thread_id: str
     success: bool
     analysis: Optional[AnalysisData] = None
 
 # ============= SYSTEM PROMPT =============
-SYSTEM_PROMPT = """You are Remoto AI - a voice-controlled computer assistant. The user is remotely controlling their computer via voice commands on their phone.
+SYSTEM_PROMPT = """You are Remoto AI - a remote computer assistant. The user is remotely controlling their computer via text commands on their phone.
 
 CORE BEHAVIOR:
 - Execute exactly what the user asks
-- Be conversational and concise (they're listening, not reading)
-- Keep voice responses to 1-2 sentences maximum
+- Be concise in responses (1-2 sentences maximum)
 - Use conversation history to understand context ("it", "that file", etc.)
 - Make smart assumptions rather than asking for clarification
 - Combine related steps, but not unrelated tasks
@@ -194,19 +186,19 @@ YOU MUST USE TOOLS FOR ALL ACTIONS
 - Combine multiple tool calls for complex sequences (including retries!)
 - When a tool returns success=False → Try alternative approach, don't give up
 - When a tool returns success=True → TRUST IT - the action succeeded
-- Only provide voice confirmation after tool execution
+- Only provide confirmation after tool execution
 
 OCR & COORDINATES:
 - You receive OCR text with positions from screenshot (1280x720)
 - Use OCR coordinates with click_position tool - system auto-scales to actual resolution
-- Example: OCR shows "Submit" at (850, 600) ? call click_position(x=850, y=600)
+- Example: OCR shows "Submit" at (850, 600) → call click_position(x=850, y=600)
 
 VISUAL FEEDBACK AFTER TOOL EXECUTION:
 - After you execute tools, you will receive a NEW screenshot showing the result
 - Use this screenshot to verify if your actions succeeded
 - Check if dialogs opened, text appeared, buttons were clicked, etc.
 - If the action didn't work as expected, try alternative approaches
-- If the user's request is complete, provide voice confirmation
+- If the user's request is complete, provide confirmation
 - If more steps are needed, continue with additional tool calls
 
 CLICKING STRATEGY (CRITICAL - for ANY element):
@@ -242,11 +234,10 @@ QUICK PATTERNS:
 - Click: Use find_and_click or click_position tools
 
 RESPONSE FORMAT:
-Only use <voice> tags for spoken confirmation:
-<voice>Brief spoken confirmation of what you did</voice>
+Respond with a brief confirmation of what you did. Keep it to 1-2 sentences.
 
 REMEMBER:
-- User is on phone listening - be BRIEF
+- Be BRIEF in responses
 - Don't ask for filenames - use sensible defaults
 - MUST execute actions using tools, not describe them
 - Combine related tool calls for efficiency"""
@@ -302,38 +293,6 @@ def get_screenshot_with_ocr() -> Tuple[str, str, float]:
     
     return screenshot_base64, ocr_text, scale_factor
 
-def text_to_speech(text: str) -> Optional[str]:
-    """Convert text to speech and return the audio as a base64-encoded MP3 string.
-
-    Uses Google Text-to-Speech (gTTS) which requires no API key. The audio is
-    written to a temporary file, read back, and base64-encoded for transport.
-
-    Args:
-        text: The text to synthesize into speech.
-
-    Returns:
-        Base64-encoded MP3 audio string, or None if synthesis fails.
-    """
-    try:
-        tts = gTTS(text=text, lang='en', slow=False)
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_audio:
-            temp_path = temp_audio.name
-        
-        tts.save(temp_path)
-        
-        with open(temp_path, 'rb') as f:
-            audio_bytes = f.read()
-        
-        os.unlink(temp_path)
-        
-        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        return audio_base64
-        
-    except Exception as e:
-        print(f"TTS error: {e}")
-        return None
-
 async def classify_task_complexity(user_message: str, backboard_client, assistant) -> dict:
     """Use a lightweight LLM to classify task complexity and select the optimal model.
 
@@ -344,7 +303,7 @@ async def classify_task_complexity(user_message: str, backboard_client, assistan
       - complex -> anthropic/claude-sonnet-4
 
     Args:
-        user_message: The raw voice command text from the user.
+        user_message: The raw command text from the user.
         backboard_client: Initialized BackboardClient instance.
         assistant: The Backboard assistant object.
 
@@ -383,9 +342,6 @@ JSON response:"""
             stream=False
         )
         
-        import json
-        import re
-        
         content = response.content.strip()
         
         json_match = re.search(r'\{[^}]+\}', content)
@@ -414,8 +370,8 @@ JSON response:"""
             "recommended_model": ("google", "gemini-2.5-flash-lite")
         }
 
-async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, dict]:
-    """Send a voice command to Backboard.io and execute any returned tool calls.
+async def ask_backboard(user_message: str, screenshot_b64: str, ocr_text: str, thread_id: str, scale_factor: float) -> tuple[str, str, str, dict]:
+    """Send a command to Backboard.io and execute any returned tool calls.
 
     Manages thread creation/reuse, runs the complexity classifier to pick the
     right model, submits the message with OCR context, then enters a tool-call
@@ -426,14 +382,14 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
     so it can confirm the actions succeeded.
 
     Args:
-        user_message: Transcribed voice command from the user.
+        user_message: Command text from the user.
         screenshot_b64: Base64-encoded PNG screenshot of the current screen.
         ocr_text: OCR-extracted text with coordinates from the screenshot.
         thread_id: Frontend thread ID for conversation continuity (or empty for new).
         scale_factor: Ratio of actual screen width to the 1280px OCR image width.
 
     Returns:
-        Tuple of (voice_response, full_response, thread_id, analysis_data).
+        Tuple of (assistant_response, full_response, thread_id, analysis_data).
     """
     global backboard_client, assistant, tool_executor, thread_id_mapping
     
@@ -606,9 +562,6 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
             await asyncio.sleep(0.5)
             final_screenshot_b64, final_ocr_text, _ = get_screenshot_with_ocr()
             
-            import tempfile
-            import os
-            
             with tempfile.NamedTemporaryFile(mode='wb', suffix='.png', delete=False) as temp_file:
                 temp_file.write(base64.b64decode(final_screenshot_b64))
                 temp_screenshot_path = temp_file.name
@@ -633,29 +586,28 @@ async def ask_backboard_voice(user_message: str, screenshot_b64: str, ocr_text: 
         except Exception as e:
             print(f"Warning: Failed to send final verification screenshot: {e}")
     
-    voice_match = re.search(r'<voice>(.*?)</voice>', full_response, re.DOTALL)
-    voice_response = voice_match.group(1).strip() if voice_match else full_response
-    voice_response = re.sub(r'<[^>]+>', '', voice_response).strip()
+    tag_match = re.search(r'<voice>(.*?)</voice>', full_response, re.DOTALL)
+    assistant_response = tag_match.group(1).strip() if tag_match else full_response
+    assistant_response = re.sub(r'<[^>]+>', '', assistant_response).strip()
     analysis_data = {
         "model": f"{llm_provider}/{model_name}",
         "complexity": classification['complexity'],
         "tool_calls": all_tool_results
     }
     
-    return voice_response, full_response, thread_id, analysis_data
-@app.post("/voice", response_model=VoiceResponse)
-async def voice_command(request: VoiceRequest):
-    """Main voice command endpoint.
+    return assistant_response, full_response, thread_id, analysis_data
+@app.post("/command", response_model=CommandResponse)
+async def run_command(request: CommandRequest):
+    """Main command endpoint.
 
     Captures a screenshot, runs OCR, sends the command to the AI agent,
-    executes tool calls, generates a TTS audio response, and returns
-    the result along with an updated screenshot.
+    executes tool calls, and returns the result along with an updated screenshot.
 
     Args:
-        request: VoiceRequest containing the user's text, optional thread_id, and history.
+        request: CommandRequest containing the user's text and optional thread_id.
 
     Returns:
-        VoiceResponse with the assistant message, audio, screenshot, and analysis data.
+        CommandResponse with the assistant message, screenshot, and analysis data.
     """
     print("\n" + "=" * 60)
     print(f"USER SAID: {request.text}")
@@ -669,7 +621,7 @@ async def voice_command(request: VoiceRequest):
     print(f"\nOCR Text Preview (first 500 chars):\n{ocr_text[:500]}\n")
     
     try:
-        voice_response, full_response, thread_id, analysis_data = await ask_backboard_voice(
+        assistant_response, full_response, thread_id, analysis_data = await ask_backboard(
             request.text,
             screenshot_b64,
             ocr_text,
@@ -677,21 +629,16 @@ async def voice_command(request: VoiceRequest):
             scale_factor
         )
         
-        print(f"ASSISTANT SAYS: \"{voice_response}\"")
+        print(f"ASSISTANT SAYS: \"{assistant_response}\"")
         
-        print("Generating speech response...")
-        audio_base64 = text_to_speech(voice_response)
-        
-        time.sleep(0.8)
-        time.sleep(0.5)
+        time.sleep(1.3)
         
         new_screenshot_b64, _, _ = get_screenshot_with_ocr()
         
         print(f"Request completed. Thread: {thread_id}\n")
         
-        return VoiceResponse(
-            assistant_message=voice_response,
-            assistant_audio_base64=audio_base64,
+        return CommandResponse(
+            assistant_message=assistant_response,
             screenshot_base64=new_screenshot_b64,
             thread_id=str(thread_id),
             success=True,
@@ -710,9 +657,8 @@ async def voice_command(request: VoiceRequest):
             import traceback
             traceback.print_exc()
         
-        return VoiceResponse(
+        return CommandResponse(
             assistant_message=error_msg,
-            assistant_audio_base64=text_to_speech(error_msg),
             screenshot_base64=screenshot_b64,
             thread_id=str(request.thread_id) if request.thread_id else "",
             success=False

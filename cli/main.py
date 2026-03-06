@@ -11,9 +11,9 @@ from cli.utils.logger import Logger
 @click.version_option(version="1.0.0")
 def main():
     """
-    Remote AI - Voice-controlled computer automation
+    Remoto AI - AI-powered computer automation
     
-    Control your computer from anywhere using just your voice.
+    Control your computer remotely from anywhere.
     """
     pass
 
