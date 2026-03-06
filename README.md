@@ -1,17 +1,17 @@
-# Remoto AI
+<div align="center">
+  <img width="100%" src="https://img.shields.io/badge/Winner-McGill%20CodeJam%2015-FFD700?style=for-the-badge&labelColor=2c2c2c" alt="Winner at McGill CodeJam 15" />
+</div>
 
-**AI-powered remote computer access from anywhere in the world.**
-
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Built at McHacks 13](https://img.shields.io/badge/Built%20at-McHacks%2013-orange.svg)](https://mchacks.ca/)
-[![Powered by Backboard.io](https://img.shields.io/badge/Powered%20by-Backboard.io-purple.svg)](https://backboard.io/)
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.8%2B-blue.svg" alt="Python 3.8+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" /></a>
+  <a href="https://backboard.io/"><img src="https://img.shields.io/badge/Powered%20by-Backboard.io-purple.svg" alt="Powered by Backboard.io" /></a>
+</p>
 
 Remoto AI lets you control your home PC from any device using text commands. It combines AI-powered screen understanding and real-time streaming to create an intelligent assistant that learns your workflows and remembers your preferences -- powered by [Backboard.io](https://backboard.io/).
 
 ![Architecture Diagram](./public/Remoto.png)
 
----
 
 ## Table of Contents
 
